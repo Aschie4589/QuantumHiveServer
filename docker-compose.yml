@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:latest
+    container_name: quantumhive_db
+    deploy:
+      restart_policy:
+        condition: on-failure
+    secrets:
+      - db_password
+    environment:
+      POSTGRES_USER: quantumhiv
+      POSTGRES_DB: quantumhive
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password  # Point to secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Persistent storage
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # Mount init.sql for automatic execution
+    networks:
+      - quantum_hive_network  # Connect to the custom network to ensure no outside access
+  redis:
+    image: redis:latest
+    container_name: quantumhive_redis
+    restart: always
+    networks:
+      - quantum_hive_network  # Connect to the custom network to ensure no outside access
+
+  # Uvicorn server
+  uvicorn:
+    image: quantumhive/uvicorn-server:latest
+    secrets:
+      - db_password
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password  # Point to secret
+    depends_on:
+      - db  # Ensure the database is started before the Uvicorn service
+      - redis  # Ensure Redis is started before the Uvicorn service
+    ports:
+      - "8000:8000"  # Expose the Uvicorn server on port 8000
+    networks:
+      - quantum_hive_network # Connect to the custom network to ensure no outside access
+
+networks:
+  quantum_hive_network:  # Define a custom network
+    driver: overlay
+
+secrets:
+  db_password:
+    external: true  # Tells Docker to use an existing secret
+
+volumes:
+  postgres_data:  # Define the persistent volume
+    driver: local  # Use the local driver (i.e. files are saved on the host machine and not in the container)
