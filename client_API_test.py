@@ -6,6 +6,13 @@ response = requests.get("http://localhost:8000/")
 print(response.json())  # Should print the dummy status info
 print("\n")
 
+# Next access /startup to create a dummy job
+print("Will create a dummy job now")
+response = requests.get("http://localhost:8000/startup")
+print(response.json())  # Should print the dummy job info
+print("\n")
+
+
 # Create a new user. Use JSON payload instead of form data
 print("Will create a new user now")
 user_data = {"username": "client4", "password": "password123", "email": "test@test.com"}

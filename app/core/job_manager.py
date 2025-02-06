@@ -1,10 +1,10 @@
 from sqlalchemy.orm import Session
-from models.job import Job, JobStatus, JobType
+from app.models.job import Job, JobStatus, JobType
 import redis
 import datetime
-from config import JobManagerConfig
-from db.base import get_db
-from security import redis_client
+from app.core.config import JobManagerConfig
+from app.db.base import SessionLocal
+from app.core.security import redis_client
 
 class JobManager:
     def __init__(self, db: Session, redis_client: redis.Redis, config: JobManagerConfig = JobManagerConfig()):
@@ -64,6 +64,8 @@ class JobManager:
         # Next purge the Redis queue of jobs that are no longer pending
         job_queue = self.redis.lrange("job_queue", 0, -1)
         for job_id in job_queue:
+            #cast to int
+            job_id = int(job_id)
             job = self.db.query(Job).filter(Job.id == job_id).first()
             if job.status != JobStatus.pending:
                 self.redis.lrem("job_queue", 0, job_id)
@@ -85,7 +87,8 @@ class JobManager:
 
         elif job_type == JobType.generate_vector:
             new_job = Job(job_type=JobType.generate_vector, status=JobStatus.pending, input_data=input_data)
-
+        new_job.last_update = datetime.datetime.now()
+        new_job.time_created = datetime.datetime.now()
         self.db.add(new_job)
         self.db.commit()
         self.db.refresh(new_job)
@@ -98,7 +101,7 @@ class JobManager:
             """Assign a job to an available worker."""
             print("Assigning job to worker:", worker_id)
             # Get a job from the Redis queue
-            job_id = self.redis.lpop("job_queue")
+            job_id = int(self.redis.lpop("job_queue"))
             print("Job ID:", job_id)
             if not job_id:
                 return None  # No jobs available
@@ -197,7 +200,6 @@ class JobManager:
 # Job Manager logic
 # ------------------------------
 
-job_manager = JobManager(get_db(), redis_client)
-
+job_manager = JobManager(SessionLocal(), redis_client)
 
 
