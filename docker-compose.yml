@@ -8,12 +8,12 @@ services:
     secrets:
       - db_password
     environment:
-      POSTGRES_USER: quantumhiv
+      POSTGRES_USER: quantumhive
       POSTGRES_DB: quantumhive
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password  # Point to secret
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent storage
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # Mount init.sql for automatic execution
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - quantum_hive_network  # Connect to the custom network to ensure no outside access
   redis:
@@ -28,6 +28,7 @@ services:
     image: quantumhive/uvicorn-server:latest
     secrets:
       - db_password
+      - jwt_secret
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password  # Point to secret
     depends_on:
@@ -44,6 +45,8 @@ networks:
 
 secrets:
   db_password:
+    external: true  # Tells Docker to use an existing secret
+  jwt_secret:
     external: true  # Tells Docker to use an existing secret
 
 volumes:
