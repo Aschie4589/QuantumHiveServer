@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.schemas.user import UserLogin
 from app.schemas.auth import TokenBase
 from app.models.user import User # Import the User ORM model (i.e. the database model for the User table)
-from app.core.security import verify_password, create_token, verify_token, is_token_revoked, revoke_token, get_current_user
+from app.core.security import verify_password, create_token, verify_token, is_token_revoked, revoke_token
 from app.db.base import get_db
 import datetime
 
@@ -52,10 +52,3 @@ def refresh_token(refresh: str = Header(...), response_model=TokenBase):
     refresh_token = create_token(data={"sub": payload["sub"], "type": "refresh"}, expires_delta=datetime.timedelta(days=30))
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
-@router.get("/status")
-def status(current_user: dict = Depends(get_current_user)):
-    # Dummy status info. Add user.
-    return {
-        "status": "Server is running",
-        "user": current_user["sub"]
-    }

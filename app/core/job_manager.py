@@ -4,7 +4,7 @@ import redis
 import datetime
 from app.core.config import JobManagerConfig
 from app.db.base import SessionLocal
-from app.core.security import redis_client
+from app.core.redis import redis_client
 
 class JobManager:
     def __init__(self, db: Session, redis_client: redis.Redis, config: JobManagerConfig = JobManagerConfig()):
@@ -75,18 +75,21 @@ class JobManager:
                             
     def create_job(self, job_type: JobType, input_data: dict, kraus_operators: str = None, vector: str = None):
         """Create a new job and queue it."""
-        if job_type == JobType.minimize:
+        if job_type == JobType.minimize.value:
             if vector and kraus_operators:
                 new_job = Job(job_type=JobType.minimize, status=JobStatus.pending, input_data=input_data, kraus_operator=kraus_operators, vector=vector)
             else:
                 print("Missing required parameters for minimize job.")
                 return None
 
-        elif job_type == JobType.generate_kraus:
+        elif job_type == JobType.generate_kraus.value:
             new_job = Job(job_type=JobType.generate_kraus, status=JobStatus.pending, input_data=input_data)
 
-        elif job_type == JobType.generate_vector:
+        elif job_type == JobType.generate_vector.value:
             new_job = Job(job_type=JobType.generate_vector, status=JobStatus.pending, input_data=input_data)
+        else:
+            print("Invalid job type.")
+            return None
         new_job.last_update = datetime.datetime.now()
         new_job.time_created = datetime.datetime.now()
         self.db.add(new_job)
@@ -101,10 +104,12 @@ class JobManager:
             """Assign a job to an available worker."""
             print("Assigning job to worker:", worker_id)
             # Get a job from the Redis queue
-            job_id = int(self.redis.lpop("job_queue"))
-            print("Job ID:", job_id)
+            job_id = self.redis.lpop("job_queue")
             if not job_id:
+                print("No jobs available.")
                 return None  # No jobs available
+            job_id = int(job_id)
+            print("Job ID:", job_id)
 
             # Lock the job and mark it as 'running' in the database
             job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -113,7 +118,7 @@ class JobManager:
                 # Database inconsistency: job in the queue but not in the database
                 # Log this
                 print(f"Job {job_id} not found in the database, but present in Redis.")
-                return None  # Job not found in the database
+                return self.assign_job_to_worker(worker_id)  # Retry
 
             if job.status != JobStatus.pending:
                 # Job is not available for assignment (already running, completed, etc.)
@@ -121,7 +126,7 @@ class JobManager:
                 print("Job status:", job.status)
                 print("Will refresh the Redis queue.")
                 self.sync_jobs()
-                return None  # Job is not available for assignment (already running, completed, etc.)
+                return self.assign_job_to_worker(worker_id)  # Retry
 
             # Update the job status to "running" and assign the worker
             job.status = JobStatus.running

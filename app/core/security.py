@@ -2,7 +2,7 @@ from passlib.context import CryptContext
 import jwt # Importing jwt from the PyJWT module. This will be used to generate and verify JWT tokens. 
 import datetime
 from fastapi import HTTPException, Header # Importing Header and HTTPException. 
-from redis import Redis
+from app.core.redis import redis_client
 # Here we handle security functions. We check passwords and we issue/revoke tokens.
 
 
@@ -19,10 +19,7 @@ with open("/run/secrets/jwt_secret", "r") as f:
 
 
 
-# Redis Settings
-# Connect to Redis
-# TODO: Can we make this more secure? Redis is exposed to the internet.
-redis_client = Redis(host="redis", port=6379, db=0)
+
 
 # ------------------------------
 # Authentication Functions

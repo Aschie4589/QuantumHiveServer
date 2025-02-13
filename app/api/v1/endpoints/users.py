@@ -7,7 +7,7 @@ from app.db.base import get_db
 
 router = APIRouter()
 
-@router.post("/signup", response_model=UserResponse)
+@router.post("/create", response_model=UserResponse)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
     db_mail = db.query(User).filter(User.email == user.email).first()

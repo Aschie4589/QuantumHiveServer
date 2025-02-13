@@ -47,3 +47,9 @@ CREATE TABLE jobs (
     worker_id TEXT,  -- Assigned worker (nullable initially)
     priority INTEGER DEFAULT 1
 );
+
+CREATE TABLE files (
+    id VARCHAR(8) PRIMARY KEY,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('kraus', 'vector')),
+    full_path VARCHAR(255) NOT NULL UNIQUE
+);

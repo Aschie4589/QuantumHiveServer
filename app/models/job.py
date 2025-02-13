@@ -17,30 +17,14 @@ class JobType(enum.Enum):
     generate_kraus = "generate_kraus"
     generate_vector = "generate_vector"
 
-'''
-CREATE TABLE jobs (
-    id SERIAL PRIMARY KEY,
-    job_type TEXT NOT NULL CHECK (job_type IN ('minimize', 'generate_kraus', 'generate_vector')),
-    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled', 'paused')),
-    input_data JSONB,  -- Store job parameters in structured format
-    kraus_operator TEXT,  -- File path or reference
-    vector TEXT,  -- Store initial or final vector (or reference)
-    num_iterations INTEGER DEFAULT 0,  -- Track how many iterations were run
-    time_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    time_started TIMESTAMP,
-    time_finished TIMESTAMP,
-    last_update TIMESTAMP,
-    worker_id TEXT,  -- Assigned worker (nullable initially)
-    priority INTEGER DEFAULT 1
-'''
 class Job(Base):
     __tablename__ = "jobs"
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_type = Column(Enum(JobType), nullable=False)  # e.g., "minimize", "generate_kraus"
     status = Column(Enum(JobStatus), default=JobStatus.pending, nullable=False)
     input_data = Column(JSONB, nullable=True)  # Correct column type
-    kraus_operator = Column(String)
-    vector = Column(String)
+    kraus_operator = Column(String) # Id associated to kraus operators, be it input or output of the job
+    vector = Column(String) # Id associated to the vector, be it input or output of the job
     num_iterations = Column(Integer, default=0)
     time_created = Column(DateTime, server_default=func.now())
     time_started = Column(DateTime)
