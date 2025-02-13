@@ -41,11 +41,23 @@ docker stack deploy -c docker-compose.yml quantum_hive_stack
 
 # Check that postgres is running. If so, change the password.
 # Note that the pw needs to be loaded from the secret within the system!
-if [ $(docker service ls | grep quantum_hive_stack_db | wc -l) -gt 0 ]; then
+if docker ps --filter "name=quantum_hive_stack_db" --format '{{.ID}}' | grep -q .; then
     echo "Postgres is running. Changing password."
     # PW needs to be read in docker container
     # docker exec to run a command in a running container and read the secret
-    PROCESS=$(docker ps -q --filter name=quantum_hive_stack_db)
+    TRIES=5
+    while [ $TRIES -gt 0 ]; do
+        PROCESS=$(docker ps -q --filter name=quantum_hive_stack_db)
+        if [ -n "$PROCESS" ]; then
+            STATUS=$(docker inspect --format='{{.State.Status}}' $PROCESS)
+            if [ "$STATUS" = "running" ]; then
+                break
+            fi
+        fi
+        echo "Waiting for Postgres container to be ready..."
+        sleep 3
+        ((TRIES--))
+    done
     docker exec -it $PROCESS psql -U quantumhive -c "ALTER USER quantumhive WITH PASSWORD '$(docker exec -i $PROCESS cat /run/secrets/db_password)';"
 else
     echo "Postgres is not running. Skipping password change."

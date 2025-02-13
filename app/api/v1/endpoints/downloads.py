@@ -15,6 +15,7 @@ import json
 import os
 from app.core.config import FileHandlingConfig
 import shutil
+from app.core.job_manager import job_manager
 
 router = APIRouter()
 cfg = FileHandlingConfig()
@@ -117,7 +118,7 @@ def request_upload(current_user: dict = Depends(get_current_user), response_mode
 @router.post("/upload/{token}")
 async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     """
-    Securely upload a file using a one-time token.
+    Securely upload a file using a one-time token. TODO: validate the file!!!
     """
     # Step 1: Retrieve and validate the token from Redis
     token_data = redis_client.get(token)
@@ -137,6 +138,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     unique_id = str(uuid.uuid4())[:8]
     file_path = os.path.join(cfg.save_path, unique_filename)
     try:
+        job_manager.get_job_status
         jb = db.query(Job).filter(Job.id == job_id).first()
         if not jb:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -161,14 +163,23 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
         print("file_type",file_type)
         print("unique_id",unique_id)
         
-        if file_type == FileTypeEnum.kraus:
-            jb.kraus_id = unique_id
-        elif file_type == FileTypeEnum.vector:
-            jb.vector_id = unique_id
+        try:
+            file_type_enum = FileTypeEnum(file_type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid file type: {file_type}")
 
-        db.commit()
-        db.refresh(jb)
-
+        if file_type_enum == FileTypeEnum.kraus:
+            print("Detected kraus")
+            jb.kraus_operator = unique_id
+        elif file_type_enum == FileTypeEnum.vector:
+            print("Detected vector")
+            jb.vector = unique_id
+        try:
+            db.commit()
+            db.refresh(jb)
+        except Exception as e:
+            db.rollback()  # Undo changes if commit fails
+            raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
         return {"message": "Upload successful"}
 
     except Exception as e:

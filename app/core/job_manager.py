@@ -140,16 +140,43 @@ class JobManager:
     def get_assigned_worker(self, job_id: int):
         """Get the worker assigned to a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
-        return job.worker_id
+        if not job:
+            return None
+        return {"id": job.worker_id}
 
     def get_job_status(self, job_id: int):
         """Retrieve job status by ID."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
-        return {"id": job.id, "status": job.status.value, "result": job.result}
+        if not job:
+            return None
+        return {"id": job.id, "status": job.status.value}
+
+    def get_job_type(self, job_id: int):
+        """Retrieve job type by ID."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        return {"job_type": job.job_type}
+
+    def get_kraus(self, job_id: int):
+        """Retrieve the Kraus operator for a job."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        return {"kraus_operator": job.kraus_operator}
+
+    def get_vector(self, job_id: int):
+        """Retrieve the vector for a job."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        return {"vector": job.vector} 
 
     def update_job_status(self, job_id: int, status: JobStatus):
         """Update the status of a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
         job.status = status
         job.last_update = datetime.datetime.now()
         self.db.commit()
@@ -158,6 +185,8 @@ class JobManager:
     def update_kraus(self, job_id: int, kraus: str):
         """Update the Kraus operator for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
         job.kraus_operator = kraus
         job.last_update = datetime.datetime.now()
         self.db.commit()
@@ -174,16 +203,19 @@ class JobManager:
     def update_iterations(self, job_id: int, num_iterations: int):
         """Update the number of iterations for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
         job.num_iterations = num_iterations
         job.last_update = datetime.datetime.now()
         self.db.commit()
         return job
 
-    def complete_job(self, job_id: int, result: str):
+    def complete_job(self, job_id: int):
         """Mark a job as completed."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
         job.status = JobStatus.completed
-        job.result = result
         job.time_finished = datetime.datetime.now()
         job.last_update = datetime.datetime.now()
         self.db.commit()
@@ -200,7 +232,17 @@ class JobManager:
         self.redis.rpush("job_queue", job.id)
         return job
 
-
+    def ping_worker(self, worker_id: str):
+        """Update the last ping time for a worker."""
+        jobs = self.db.query(Job).filter(Job.worker_id == worker_id).filter(Job.status == JobStatus.running).all()
+        if not jobs:
+            return None
+        for job in jobs:
+            print("Pinging worker:", worker_id)
+            print("Job ID:", job.id)
+            job.last_update = datetime.datetime.now()
+        self.db.commit()
+        return jobs
 # ------------------------------
 # Job Manager logic
 # ------------------------------
