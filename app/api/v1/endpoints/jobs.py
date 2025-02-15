@@ -140,6 +140,7 @@ def update_iterations(job_id: str = Form(...), num_iterations: int = Form(...), 
     if not j:
         raise HTTPException(status_code=400, detail="Job iteration update failed.")
     return {"result": "success"}
+
 @router.post("/complete")
 def complete_job(job_id: str = Form(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     # Check that the job is assigned to the user
@@ -177,7 +178,7 @@ def complete_job(job_id: str = Form(...), current_user: dict = Depends(get_curre
             raise HTTPException(status_code=404, detail="Vector not found.")
         if not jvector["vector"]:
             raise HTTPException(status_code=400, detail="Vector file not uploaded.")
-        
+
     # if the job type is minimize, both fields are populated from start. Don't do any checks
     # TODO : find some reasonable checks
 
@@ -186,3 +187,27 @@ def complete_job(job_id: str = Form(...), current_user: dict = Depends(get_curre
     if not j:
         raise HTTPException(status_code=400, detail="Job completion failed.")
     return {"result": "success"}
+
+@router.post("/cancel")
+def cancel_job(job_id: str = Form(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check that the job is assigned to the user
+    j = job_manager.get_job_status(job_id)
+    if not j:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    uid = job_manager.get_assigned_worker(job_id)
+    if not uid:
+        raise HTTPException(status_code=404, detail="Job not assigned to any worker.")
+    if uid["id"] != current_user["sub"]:
+        raise HTTPException(status_code=403, detail="Unauthorized user.")
+    
+    # user is authorized.
+    # check that the job was running
+    if j["status"] != "running" and j["status"] != "paused":
+        raise HTTPException(status_code=400, detail="Job is not running or paused.")
+    
+    # mark the job as canceled
+    j = job_manager.update_job_status(job_id, JobStatus.canceled)
+    if not j:
+        raise HTTPException(status_code=400, detail="Job cancel failed.")
+    return {"result": "success"}
+

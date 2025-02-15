@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, Enum
+from sqlalchemy import Column, Integer, String, DateTime, func, Enum, Double
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -25,11 +25,13 @@ class Job(Base):
     input_data = Column(JSONB, nullable=True)  # Correct column type
     kraus_operator = Column(String) # Id associated to kraus operators, be it input or output of the job
     vector = Column(String) # Id associated to the vector, be it input or output of the job
+    entropy = Column(Double, nullable=False, default=-1.0)  # Default -1
     num_iterations = Column(Integer, default=0)
     time_created = Column(DateTime, server_default=func.now())
     time_started = Column(DateTime)
     time_finished = Column(DateTime)
     last_update = Column(DateTime)
     worker_id = Column(String)
+    channel_id = Column(Integer, nullable=True)
     priority = Column(Integer, default=1)
 

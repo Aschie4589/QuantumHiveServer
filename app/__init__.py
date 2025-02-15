@@ -1,3 +1,1 @@
-from fastapi import FastAPI
-
-app = FastAPI(title="QuantumHive API")
+from app.main import app

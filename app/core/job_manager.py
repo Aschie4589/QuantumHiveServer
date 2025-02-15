@@ -73,20 +73,25 @@ class JobManager:
         else:
             print("No non-pending jobs to remove from the Redis queue.")
                             
-    def create_job(self, job_type: JobType, input_data: dict, kraus_operators: str = None, vector: str = None):
+    def create_job(self, job_type: JobType, input_data: dict, kraus_operators: str = None, vector: str = None, channel_id: int = -1):
         """Create a new job and queue it."""
-        if job_type == JobType.minimize.value:
+        if job_type == JobType.minimize:
+            # debug. print all passed things
+            print("Passed input data:", input_data)
+            print("Passed kraus operators:", kraus_operators)
+            print("Passed vector:", vector)
+
             if vector and kraus_operators:
-                new_job = Job(job_type=JobType.minimize, status=JobStatus.pending, input_data=input_data, kraus_operator=kraus_operators, vector=vector)
+                new_job = Job(job_type=JobType.minimize, status=JobStatus.pending, input_data=input_data, kraus_operator=kraus_operators, vector=vector, channel_id=channel_id)
             else:
                 print("Missing required parameters for minimize job.")
                 return None
 
-        elif job_type == JobType.generate_kraus.value:
-            new_job = Job(job_type=JobType.generate_kraus, status=JobStatus.pending, input_data=input_data)
+        elif job_type == JobType.generate_kraus:
+            new_job = Job(job_type=JobType.generate_kraus, status=JobStatus.pending, input_data=input_data, channel_id=channel_id)
 
-        elif job_type == JobType.generate_vector.value:
-            new_job = Job(job_type=JobType.generate_vector, status=JobStatus.pending, input_data=input_data)
+        elif job_type == JobType.generate_vector:
+            new_job = Job(job_type=JobType.generate_vector, status=JobStatus.pending, input_data=input_data, channel_id=channel_id)
         else:
             print("Invalid job type.")
             return None
@@ -172,6 +177,27 @@ class JobManager:
             return None
         return {"vector": job.vector} 
 
+    def get_input_data(self, job_id: int):
+        """Retrieve the vector for a job."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        return {"input_data": job.input_data} 
+
+    def get_entropy(self, job_id: int):
+        """Retrieve the entropy for a job."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        return {"entropy": job.entropy} 
+    
+    def get_channel(self, job_id: int):
+        """Retrieve the channel for a job."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        return {"channel_id": job.channel_id} 
+
     def update_job_status(self, job_id: int, status: JobStatus):
         """Update the status of a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -209,9 +235,30 @@ class JobManager:
         job.last_update = datetime.datetime.now()
         self.db.commit()
         return job
+    
+    def update_entropy(self, job_id: int, entropy: float):
+        """Update the entropy for a job."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        job.entropy = entropy
+        job.last_update = datetime.datetime.now()
+        self.db.commit()
+        return job
+
+    def update_channel(self, job_id: int, channel_id: int):
+        """Update the entropy for a job."""
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return None
+        job.channel_id = channel_id
+        job.last_update = datetime.datetime.now()
+        self.db.commit()
+        return job
+
 
     def complete_job(self, job_id: int):
-        """Mark a job as completed."""
+        """Mark a job as completed. Add it to redis for the channel manager to process."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
         if not job:
             return None
@@ -219,6 +266,7 @@ class JobManager:
         job.time_finished = datetime.datetime.now()
         job.last_update = datetime.datetime.now()
         self.db.commit()
+        self.redis.rpush("to_process", job.id)
         return job  
 
     def restart_job(self, job_id: int):

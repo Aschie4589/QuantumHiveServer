@@ -9,28 +9,33 @@
 ## FUNCTIONALITY
 
 - API endpoints for
-    - Asking for a job
+    - *OK: Asking for a job*
     - Downloading kraus operators
     - Downloading vectors
-    - Uploading vectors
-    - Uploading kraus
+    - *OK: Uploading vectors*
+    - *OK: Uploading kraus*
     - Seeing stats for the current channel
     - Seeing stats for all channels
-    - Pausing job
-    - Resuming job
-    - Cancelling job (when quitting)
+    - *OK: Pausing job*
+    - *OK: Resuming job*
+    - *OK: Cancelling job (when quitting)*
 
 - Job format
-    - Specify the JSON response when asking for a job. Like {"job":"minimize", "mode": "singleshot", "kraus": "url"}, or {"job": "generate_kraus", "d", 100, "N", 1024, "mode":"haar"}
+    - Specify the JSON response when asking for a job. Like {"job":"minimize", "mode": "singleshot", "kraus": "url"}, or {"job": "generate_kraus", "d": 100, "N", 1024, "mode":"haar"}
     - Make sure you can't get new job before having finsihed current one!
 
 - Channels database
     - Stores info about channels:
-        - Kraus operators used (filename/path? if mounted where?)
-        - Current best MOE found
-        - If new jobs need to be spawned
+        - Kraus operators used (8 char id, starts blank)
+        - Current best MOE found (double float, starts at -1)
+        - Current best entropy vector (8 char id, starts blank)
+        - Total number of minimization attempts requested (defaults to 100, int) ("how many minimization jobs to spawn")
+        - Total number of runs spawned
         - Total number of runs completed
-        - Number of runs that are pending
+        - input dimension (int)
+        - output dimension (int)
+        - number of kraus (int)
+        - status ("generating" (kraus), "minimizing", "paused", "complete")
 
 
 - Jobs database
@@ -45,6 +50,9 @@
 
 - Users database
     - Stores the allowed usernames and the corresponding hashed passwords, and what role these users have (admin or user?)
+
+- Files database
+    - Store the info about all files that have been generated (vector and kraus files) and uploaded by users.
 
 - Login database?
     - Store login attempts

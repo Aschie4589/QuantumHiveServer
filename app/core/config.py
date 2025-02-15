@@ -13,3 +13,10 @@ class FileHandlingConfig:
     upload_link_ttl: int = 60 * 5  # 5 minutes
 
     save_path = "/data"  # Where files are stored
+
+@dataclass
+class ChannelHandlingConfig:
+    channel_number_of_runs: int = 100
+    channel_max_jobs: int = 5
+    update_interval: int = 5  # 5 seconds
+

@@ -39,12 +39,14 @@ CREATE TABLE jobs (
     input_data JSONB,  -- Store job parameters in structured format
     kraus_operator TEXT,  -- File path or reference
     vector TEXT,  -- Store initial or final vector (or reference)
+    entropy DOUBLE PRECISION NOT NULL DEFAULT -1.0,  -- Store the entropy of the final vector, if applicable
     num_iterations INTEGER DEFAULT 0,  -- Track how many iterations were run
     time_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     time_started TIMESTAMP,
     time_finished TIMESTAMP,
     last_update TIMESTAMP,
     worker_id TEXT,  -- Assigned worker (nullable initially)
+    channel_id INTEGER, -- Reference to the channel, null if not assigned
     priority INTEGER DEFAULT 1
 );
 
@@ -52,4 +54,21 @@ CREATE TABLE files (
     id VARCHAR(8) PRIMARY KEY,
     type VARCHAR(50) NOT NULL CHECK (type IN ('kraus', 'vector')),
     full_path VARCHAR(255) NOT NULL UNIQUE
+);
+
+
+-- Create the channels table
+CREATE TABLE channels (
+    id SERIAL PRIMARY KEY,
+    kraus_id VARCHAR(8) DEFAULT NULL,
+    best_moe DOUBLE PRECISION NOT NULL DEFAULT -1.0,
+    best_entropy_vector_id VARCHAR(8) DEFAULT NULL,
+    minimization_attempts INT NOT NULL DEFAULT 100,
+    runs_spawned INT NOT NULL DEFAULT 0,
+    runs_completed INT NOT NULL DEFAULT 0,
+    input_dimension INT NOT NULL,
+    output_dimension INT NOT NULL,
+    num_kraus INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'created',
+    CONSTRAINT status_check CHECK (status IN ('created', 'generating', 'minimizing', 'paused', 'complete'))
 );
