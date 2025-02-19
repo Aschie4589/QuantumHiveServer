@@ -280,17 +280,16 @@ class JobManager:
         self.redis.rpush("job_queue", job.id)
         return job
 
-    def ping_worker(self, worker_id: str):
+    def ping_worker(self, worker_id: str, job_id: int):
         """Update the last ping time for a worker."""
-        jobs = self.db.query(Job).filter(Job.worker_id == worker_id).filter(Job.status == JobStatus.running).all()
-        if not jobs:
+        job = self.db.query(Job).filter(Job.worker_id == worker_id).filter(Job.status == JobStatus.running).filter(Job.id == job_id).first()
+        if not job:
             return None
-        for job in jobs:
-            print("Pinging worker:", worker_id)
-            print("Job ID:", job.id)
-            job.last_update = datetime.datetime.now()
+        print("Pinging worker:", worker_id)
+        print("Job ID:", job.id)
+        job.last_update = datetime.datetime.now()
         self.db.commit()
-        return jobs
+        return job
 # ------------------------------
 # Job Manager logic
 # ------------------------------

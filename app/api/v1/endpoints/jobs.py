@@ -4,13 +4,14 @@ from app.core.security import get_current_user
 from app.db.base import get_db
 from app.schemas.job import JobBase, JobStatusModel, JobCreate, JobRequestModel
 from app.models.job import JobStatus
+from app.models.user import User
 
 from app.core.job_manager import job_manager
 
 
 router = APIRouter()
 
-@router.get("/status/")
+@router.get("/status")
 def get_job_status(job_id = Query(...), current_user: dict = Depends(get_current_user), response_model = JobStatusModel):
     # Check that the job is assigned to the user
     j = job_manager.get_job_status(job_id)
@@ -28,12 +29,13 @@ def get_job_status(job_id = Query(...), current_user: dict = Depends(get_current
         "job_status": j["status"]
     }
 
-@router.get("/ping")
-def ping(current_user: dict = Depends(get_current_user)):
+@router.post("/ping")
+def ping(job_id = Form(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     # Update the last ping time for the worker
-    j = job_manager.ping_worker(current_user["sub"])
+
+    j = job_manager.ping_worker(current_user["sub"], job_id)
     if not j:
-        raise HTTPException(status_code=400, detail="Worker not found.")
+        raise HTTPException(status_code=400, detail="Worker or job not found.")
     return {"message": "pong"}
 
 @router.get("/request")
@@ -54,7 +56,8 @@ def request_job(current_user: dict = Depends(get_current_user), response_model =
         "job_data": j.input_data,
         "job_status": j.status,
         "kraus_id": j.kraus_operator,
-        "vector_id": j.vector
+        "vector_id": j.vector,
+        "channel_id": j.channel_id
     }
 
 @router.post("/pause")
@@ -105,6 +108,11 @@ def resume_job(job_id: str = Form(...), current_user: dict = Depends(get_current
 
 @router.post("/create")
 def create_job(job: JobCreate = Body(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), response_model = JobBase):
+    # first check that the user is admin
+    db_user = db.query(User).filter(User.username == current_user["sub"]).first()
+    if not db_user or not db_user.role == "admin":
+        raise HTTPException(status_code=403, detail="Unauthorized user.")
+    
     # Debug: print all job info
     print("Creating job for user:", current_user["sub"])
     print(f"Job type: -{job.job_type}-")
@@ -122,6 +130,7 @@ def create_job(job: JobCreate = Body(...), current_user: dict = Depends(get_curr
         "job_id": j.id
     }
     return response
+
 @router.post("/update-iterations")
 def update_iterations(job_id: str = Form(...), num_iterations: int = Form(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     # Check that the job is assigned to the user
@@ -129,7 +138,7 @@ def update_iterations(job_id: str = Form(...), num_iterations: int = Form(...), 
     if not j:
         raise HTTPException(status_code=404, detail="Job not found.")
     uid = job_manager.get_assigned_worker(job_id)
-    if not uid:
+    if not uid["id"]:
         raise HTTPException(status_code=404, detail="Job not assigned to any worker.")
     if uid["id"] != current_user["sub"]:
         raise HTTPException(status_code=403, detail="Unauthorized user.")

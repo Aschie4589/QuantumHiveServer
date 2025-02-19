@@ -311,7 +311,9 @@ class ChannelManager:
                     #check that we haven't scheduled too many jobs
                     if channel.runs_spawned-channel.runs_completed < self.config.channel_max_jobs:
                         # There is space for spawning more!
-                        for i in range(self.config.channel_max_jobs - (channel.runs_spawned-channel.runs_completed)):
+                        jobs_to_spawn = channel.minimization_attempts - channel.runs_spawned
+                        print(f"Need to spawn {jobs_to_spawn} more jobs for channel {channel.id}")
+                        for i in range(min(jobs_to_spawn, self.config.channel_max_jobs)):
                             # Spawn a new minimizing job. This really is a job for creating a new vector...
                             data = {"input_dimension": channel.input_dimension, "channel_id": channel.id}
                             j = self.job_manager.create_job(job_type=JobType.generate_vector, input_data=data, channel_id = channel.id)

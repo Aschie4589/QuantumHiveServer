@@ -9,7 +9,7 @@ from app.db.base import get_db
 from app.models.file import File
 from app.models.job import Job
 from app.models.file import FileTypeEnum
-from app.schemas.file import FileRequestBase, FileResponseBase, FileUploadRequestBase, FileUploadResponseBase
+from app.schemas.file import FileResponseBase, FileUploadRequestBase, FileUploadResponseBase, FileDownloadRequestBase
 from app.core.redis import redis_client
 import json
 import os
@@ -31,23 +31,35 @@ def generate_download_link(file_id: str, current_user: dict, db: Session):
     """
     Generate a one-time-use download link for a file, associated with the requesting user.
     """
-    # Step 1: Validate the file exists
-    file = db.query(File).filter(File.id == file_id).first()
-    if not file:
-        raise HTTPException(status_code=404, detail="File not found")
-
+    # Step 1: Check if the file exists
+    # Skip since we already know the file exists (from the request_download endpoint)
     # Step 2: Generate a unique token
     token = str(uuid.uuid4())
 
     # Step 3: Store token in Redis with file path + user ID (expires in 5 minutes)
-    token_data = json.dumps({"file_path": file.full_path, "user_id": current_user["sub"]})
+    token_data = json.dumps({"file_id": file_id, "user_id": current_user["sub"]})
     redis_client.setex(token, timedelta(seconds=cfg.download_link_ttl), token_data)
 
     # Step 4: Return the secure download link
-    return {"download_url": f"files/download/{token}"}
+    return {"download_url": f"/files/download/{token}"}
+
+@router.post("/request-download")
+def request_download(file_req: FileDownloadRequestBase = Body(...), db: Session = Depends(get_db),current_user: dict = Depends(get_current_user), response_model = FileResponseBase):
+    """
+    Request a secure download link for a file.
+    Validates that the file exists and generates a one-time token for the requesting user.
+    """
+    # Step 1: Check if the file exists
+    file = db.query(File).filter(File.id == file_req.file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    # TODO: implement a check to see if the user should be able to access this file!
+
+    # Step 2: Generate a one-time download token (linked to the user)
+    return generate_download_link(file_req.file_id, current_user, db)
 
 @router.get("/download/{token}")
-def download_file(token: str, current_user: dict = Depends(get_current_user)):
+async def download_file(token: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Serve a file if the provided token is valid and belongs to the requesting user.
     """
@@ -58,33 +70,29 @@ def download_file(token: str, current_user: dict = Depends(get_current_user)):
 
     # Step 2: Parse the token data (file path + user ID)
     token_info = json.loads(token_data)
-    file_path = token_info["file_path"]
+    file_id = token_info["file_id"]
     user_id = token_info["user_id"]
 
-    # Step 3: Ensure the requesting user is the same who requested the link
-    if user_id != current_user["id"]:
+    # Step 3: Ensure the requesting user is the same who requested the link, and that the file exists
+    if user_id != current_user["sub"]:
         raise HTTPException(status_code=403, detail="Unauthorized access")
 
+    # get the file path
+    file = db.query(File).filter(File.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    #check it points to a file
+    if not os.path.isfile(file.full_path):
+        raise HTTPException(status_code=404, detail="Invalid path. The file does not exist.")
+
+    file_path = file.full_path
     # Step 4: Invalidate token (one-time use)
     redis_client.delete(token)
 
     # Step 5: Return the file as a response. TODO: Check the file path is right?
     return FileResponse(file_path, filename=file_path.split("/")[-1], media_type="application/octet-stream")
 
-@router.get("/request-download")
-def request_download(file_req: FileRequestBase = Form(...), db: Session = Depends(get_db),current_user: dict = Depends(get_current_user), response_model = FileResponseBase):
-    """
-    Request a secure download link for a file.
-    Validates that the file exists and generates a one-time token for the requesting user.
-    """
-    # Step 1: Check if the file exists
-    file = db.query(File).filter(File.id == file_req.id).first()
-    if not file:
-        raise HTTPException(status_code=404, detail="File not found")
-    # TODO: implement a check to see if the user should be able to access this file!
 
-    # Step 2: Generate a one-time download token (linked to the user)
-    return generate_download_link(file_req.id, current_user, db)
 
 ######################
 #   File Upload API  #
@@ -104,9 +112,9 @@ def generate_upload_link(current_user: dict):
     redis_client.setex(token, timedelta(seconds=cfg.upload_link_ttl), token_data)
 
     # Step 4: Return the secure upload link
-    return {"upload_url": f"files/upload/{token}"}
+    return {"upload_url": f"/files/upload/{token}"}
 
-@router.get("/request-upload")
+@router.post("/request-upload")
 def request_upload(current_user: dict = Depends(get_current_user), response_model = FileUploadResponseBase):
     """
     Request an upload link after a job is finished.
@@ -169,10 +177,8 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
             raise HTTPException(status_code=400, detail=f"Invalid file type: {file_type}")
 
         if file_type_enum == FileTypeEnum.kraus:
-            print("Detected kraus")
             jb.kraus_operator = unique_id
         elif file_type_enum == FileTypeEnum.vector:
-            print("Detected vector")
             jb.vector = unique_id
         try:
             db.commit()

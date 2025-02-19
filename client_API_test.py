@@ -24,13 +24,24 @@ if False:
     response = requests.post("http://localhost:8000/channels/create", data=channel_data, headers=headers)
     print(response.json())  # Should print the channel creation info
 
-
+    
 
 # List channels
 print("Will list the channels now")
 headers = {"Authorization": f"Bearer {access_token}"}
 response = requests.get("http://localhost:8000/channels/list", headers=headers)
 print(response.json())  # Should print the channel list
+
+# get id from response
+channel_id = response.json()[0]["id"]
+
+# Update minimization attempts
+print("Will update minimization attempts now")
+min_attempts_data = {"channel_id": channel_id, "attempts": 100}
+headers = {"Authorization": f"Bearer {access_token}"}
+response = requests.post("http://localhost:8000/channels/update-minimization-attempts", data=min_attempts_data, headers=headers)
+print(response.json())  # Should print the success message
+
 
 
 # Ask the server for a job

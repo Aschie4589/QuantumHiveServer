@@ -70,5 +70,5 @@ CREATE TABLE channels (
     output_dimension INT NOT NULL,
     num_kraus INT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'created',
-    CONSTRAINT status_check CHECK (status IN ('created', 'generating', 'minimizing', 'paused', 'complete'))
+    CONSTRAINT status_check CHECK (status IN ('created', 'generating', 'minimizing', 'paused', 'completed'))
 );

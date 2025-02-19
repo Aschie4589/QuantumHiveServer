@@ -20,5 +20,10 @@ class JobCreate(BaseModel):
     kraus_operator: str
     vector: str
 
-class JobRequestModel(JobCreate):
+class JobRequestModel(BaseModel):
     job_id: int    
+    job_type: str
+    input_data: Dict[str, Any]  
+    kraus_operator: str
+    vector: str
+    channel_id: str

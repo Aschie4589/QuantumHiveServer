@@ -11,3 +11,7 @@ class ChannelCreateHaar(ChannelCreateBase):
 class ChannelResponseBase(BaseModel):
     id: int
     status: str
+
+class ChannelSetMinimizationAttempts(BaseModel):
+    channel_id: int
+    attempts: int
