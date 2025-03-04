@@ -26,13 +26,14 @@ def create_channel(cmd: ChannelCreateHaar = Form(...), current_user: dict = Depe
         raise HTTPException(status_code=403, detail="Unauthorized user.")
 
     c = channel_manager.create_channel(cmd.input_dimension, cmd.output_dimension, cmd.num_kraus)
+    c = db.merge(c)
     if not c:
         raise HTTPException(status_code=400, detail="Channel creation failed")
     else:
         return {"result": "success"}
     
 @router.get("/list", response_model = List[ChannelResponseBase])
-def list_channels(current_user: dict = Depends(get_current_user)):
+def list_channels(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     # TODO (later): only admin can list channels
     # list all channels
     c = channel_manager.get_channels()

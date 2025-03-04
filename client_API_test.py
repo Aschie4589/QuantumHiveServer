@@ -2,24 +2,24 @@ import requests
 
 # Create a new user. Use JSON payload instead of form data
 print("Will create a new user now")
-user_data = {"username": "client4", "password": "password123", "email": "test@test.com"}
+user_data = {"username": "admin", "password": "admin", "email": "admin@test.com"}
 response = requests.post("http://localhost:8000/users/create", json=user_data)
 print(response.json())  # Should print the new user info
 
 
 # Log in to get the token
 print("Will login with said user now")
-login_data = {"username": "client4", "password": "password123"}
+login_data = {"username": "admin", "password": "admin"}
 login_response = requests.post("http://localhost:8000/auth/login", data=login_data)
 login_info = login_response.json()
 print(login_info)  # Should print the token info
 access_token = login_info['access_token']
 refresh_token = login_info['refresh_token']
 
-if False:
+if True:
     # Create channel
     print("Will create a channel now")
-    channel_data = {"input_dimension": 2, "output_dimension": 2, "num_kraus": 2, "method": "haar"}
+    channel_data = {"input_dimension": 50, "output_dimension": 50, "num_kraus": 20, "method": "haar"}
     headers = {"Authorization": f"Bearer {access_token}"}
     response = requests.post("http://localhost:8000/channels/create", data=channel_data, headers=headers)
     print(response.json())  # Should print the channel creation info

@@ -26,6 +26,8 @@ services:
   # Uvicorn server
   uvicorn:
     image: quantumhive/uvicorn-server:latest
+    volumes:
+      - minimizer_data:/data  # Persistent storage for vector files
     secrets:
       - db_password
       - jwt_secret
@@ -50,5 +52,7 @@ secrets:
     external: true  # Tells Docker to use an existing secret
 
 volumes:
-  postgres_data:  # Define the persistent volume
-    driver: local  # Use the local driver (i.e. files are saved on the host machine and not in the container)
+  postgres_data:  # Define the persistent volume for postgres
+    driver: local  # Use the local driver. This means that the volume is stored on the host machine inside the docker volume directory, and will persist even if the container is removed
+  minimizer_data:   # Declare the named volume for saving vector files
+    driver: local   # Use the default Docker volume driver

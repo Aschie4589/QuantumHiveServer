@@ -12,7 +12,7 @@ from app.core.job_manager import job_manager
 router = APIRouter()
 
 @router.get("/status")
-def get_job_status(job_id = Query(...), current_user: dict = Depends(get_current_user), response_model = JobStatusModel):
+def get_job_status(job_id = Query(...), current_user: dict = Depends(get_current_user), response_model = JobStatusModel, db: Session= Depends(get_db)):
     # Check that the job is assigned to the user
     j = job_manager.get_job_status(job_id)
     if not j:
@@ -36,15 +36,17 @@ def ping(job_id = Form(...), current_user: dict = Depends(get_current_user), db:
     j = job_manager.ping_worker(current_user["sub"], job_id)
     if not j:
         raise HTTPException(status_code=400, detail="Worker or job not found.")
+    j = db.merge(j)
     return {"message": "pong"}
 
 @router.get("/request")
-def request_job(current_user: dict = Depends(get_current_user), response_model = JobRequestModel):
+def request_job(current_user: dict = Depends(get_current_user), response_model = JobRequestModel, db: Session = Depends(get_db)):
     print("Requesting job for user:", current_user["sub"])
     j = job_manager.assign_job_to_worker(current_user["sub"])
     if not j:
         print("No job available.")
-        raise HTTPException(status_code=400, detail="No job available.")
+        raise HTTPException(status_code=204, detail="No job available.")
+    j = db.merge(j)
     
     # If job is available, return all info about the job that the user might need to complete it. 
     # For example, kraus id and vector id.
@@ -81,6 +83,7 @@ def pause_job(job_id: str = Form(...), current_user: dict = Depends(get_current_
     j = job_manager.update_job_status(job_id, JobStatus.paused)
     if not j:
         raise HTTPException(status_code=400, detail="Job pausing failed.")
+    j = db.merge(j)
     return {"result": "success"}
 
 @router.post("/resume")
@@ -104,15 +107,17 @@ def resume_job(job_id: str = Form(...), current_user: dict = Depends(get_current
     j = job_manager.update_job_status(job_id, JobStatus.running)
     if not j:
         raise HTTPException(status_code=400, detail="Job resuming failed.")
+    j = db.merge(j)
     return {"result": "success"}
 
 @router.post("/create")
 def create_job(job: JobCreate = Body(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), response_model = JobBase):
     # first check that the user is admin
     db_user = db.query(User).filter(User.username == current_user["sub"]).first()
-    if not db_user or not db_user.role == "admin":
+    if not db_user:
         raise HTTPException(status_code=403, detail="Unauthorized user.")
-    
+    if not db_user.role == "admin":
+        raise HTTPException(status_code=403, detail="Unauthorized user.")
     # Debug: print all job info
     print("Creating job for user:", current_user["sub"])
     print(f"Job type: -{job.job_type}-")
@@ -123,6 +128,7 @@ def create_job(job: JobCreate = Body(...), current_user: dict = Depends(get_curr
     j = job_manager.create_job(job.job_type, job.input_data, job.kraus_operator, job.vector)
     if not j:
         raise HTTPException(status_code=400, detail="Job creation failed.")
+    j= db.merge(j)
     # Debug info
     print("Job created:", j)
 
@@ -148,7 +154,29 @@ def update_iterations(job_id: str = Form(...), num_iterations: int = Form(...), 
     j = job_manager.update_iterations(job_id, num_iterations)
     if not j:
         raise HTTPException(status_code=400, detail="Job iteration update failed.")
+    j = db.merge(j)
     return {"result": "success"}
+
+@router.post("/update-entropy")
+def update_iterations(job_id: str = Form(...), entropy: float = Form(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check that the job is assigned to the user
+    j = job_manager.get_job_status(job_id)
+    if not j:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    uid = job_manager.get_assigned_worker(job_id)
+    if not uid["id"]:
+        raise HTTPException(status_code=404, detail="Job not assigned to any worker.")
+    if uid["id"] != current_user["sub"]:
+        raise HTTPException(status_code=403, detail="Unauthorized user.")
+    
+    # user is authorized.
+    # update the number of iterations
+    j = job_manager.update_entropy(job_id, entropy)
+    if not j:
+        raise HTTPException(status_code=400, detail="Job entropy update failed.")
+    j = db.merge(j)
+    return {"result": "success"}
+
 
 @router.post("/complete")
 def complete_job(job_id: str = Form(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):

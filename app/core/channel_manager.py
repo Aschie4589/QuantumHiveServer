@@ -1,7 +1,9 @@
 from sqlalchemy.orm import Session
 import redis
 from app.core.config import ChannelHandlingConfig
-from app.db.base import SessionLocal
+from app.db.base import SessionFactory
+from functools import wraps
+from sqlalchemy.exc import IntegrityError, OperationalError, DataError, SQLAlchemyError
 from app.core.redis import redis_client
 from app.core.job_manager import job_manager
 from app.models.channel import Channel, ChannelStatusEnum
@@ -10,16 +12,71 @@ import asyncio
 
 
 class ChannelManager:
-    def __init__(self, db: Session = SessionLocal(), redis_client: redis.Redis = redis_client, job_manager = job_manager, config: ChannelHandlingConfig = ChannelHandlingConfig()):
-        self.db = db
+    def __init__(self, redis_client: redis.Redis = redis_client, job_manager = job_manager, config: ChannelHandlingConfig = ChannelHandlingConfig()):
+        self.db = None
         self.redis = redis_client
         self.config = config
         self.job_manager = job_manager
+
+    ############################
+    # Session management methods
+    ############################
+
+
+    def _get_session(self):
+        """Get a new database session. Handle Exceptions"""
+        try:
+            self.db = SessionFactory()
+            return self.db
+        except Exception as e:
+            print(f"Failed to get a session: {e}")
+            return None
+        
+    def session_commit(func):
+        """Decorator to handle session commit, rollback, and logging."""
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            session = self._get_session()  # Ensure a session exists
+
+            try:
+                result = func(self, *args, **kwargs)  # Call the original method
+                session.commit()  # Commit the transaction
+                return result
+            except IntegrityError as e:
+                # Handle IntegrityError (e.g., foreign key violations, unique constraint violations)
+                session.rollback()
+                print(f"Integrity error in method {func.__name__}: {str(e)}")
+                raise
+            except OperationalError as e:
+                # Handle OperationalError (e.g., connection issues, timeouts)
+                session.rollback()
+                print(f"Operational error in method {func.__name__}: {str(e)}")
+                raise
+            except DataError as e:
+                # Handle DataError (e.g., invalid data types, out-of-range values)
+                session.rollback()
+                print(f"Data error in method {func.__name__}: {str(e)}")
+                raise
+            except SQLAlchemyError as e:
+                # Catch any other SQLAlchemy-related errors
+                session.rollback()
+                print(f"SQLAlchemy error in method {func.__name__}: {str(e)}")
+                raise
+            except Exception as e:
+                # Catch any other unexpected errors
+                session.rollback()
+                print(f"Unexpected error in method {func.__name__}: {str(e)}")
+                raise
+            finally:
+                session.close()  # Always close the session after use
+
+        return wrapper
 
     ######################
     #      Getters       #
     ######################
 
+    @session_commit
     def get_channels(self):
         """
         Get all channels. Connect to database and get all channels.
@@ -30,6 +87,7 @@ class ChannelManager:
             return None
         return channels
 
+    @session_commit
     def get_channel_status(self, channel_id: str) -> str:
         """
         Get the status of a channel. Connect to database and check the status of the channel.
@@ -41,6 +99,7 @@ class ChannelManager:
             return None
         return channel.status
     
+    @session_commit
     def get_kraus_id(self, channel_id: str) -> str:
         """
         Get the Kraus operator ID for a channel.
@@ -51,6 +110,7 @@ class ChannelManager:
             return None
         return channel.kraus_id
     
+    @session_commit
     def get_vector_id(self, channel_id: str) -> str:
         """
         Get the entropy vector ID for a channel.
@@ -61,6 +121,7 @@ class ChannelManager:
             return None
         return channel.best_entropy_vector_id
     
+    @session_commit
     def get_channel_dimensions(self, channel_id: str) -> tuple:
         """
         Get the input and output dimensions of a channel.
@@ -71,6 +132,7 @@ class ChannelManager:
             return None
         return channel.input_dimension, channel.output_dimension
     
+    @session_commit
     def get_num_kraus(self, channel_id: str) -> int:
         """
         Get the number of Kraus operators for a channel.
@@ -81,6 +143,7 @@ class ChannelManager:
             return None
         return channel.num_kraus
     
+    @session_commit
     def get_best_moe(self, channel_id: str) -> float:
         """
         Get the best MOE for a channel.
@@ -91,6 +154,7 @@ class ChannelManager:
             return None
         return channel.best_moe
     
+    @session_commit
     def get_minimization_attempts(self, channel_id: str) -> int:
         """
         Get the number of minimization attempts for a channel.
@@ -101,6 +165,7 @@ class ChannelManager:
             return None
         return channel.minimization_attempts
     
+    @session_commit
     def get_runs_spawned(self, channel_id: str) -> int:
         """
         Get the number of runs spawned for a channel.
@@ -111,6 +176,7 @@ class ChannelManager:
             return None
         return channel.runs_spawned
     
+    @session_commit
     def get_runs_completed(self, channel_id: str) -> int:
         """
         Get the number of runs completed for a channel.
@@ -125,6 +191,7 @@ class ChannelManager:
     #      Setters       #
     ######################
 
+    @session_commit
     def set_channel_status(self, channel_id: str, status: str) -> bool:
         """
         Set the status of a channel. Connect to database and update the status of the channel.
@@ -141,6 +208,7 @@ class ChannelManager:
         except:
             return False
         
+    @session_commit
     def set_kraus_id(self, channel_id: str, kraus_id: str) -> bool:
         """
         Set the Kraus operator ID for a channel.
@@ -157,6 +225,7 @@ class ChannelManager:
         except:
             return False
 
+    @session_commit
     def set_vector_id(self, channel_id: str, vector_id: str) -> bool:
         """
         Set the entropy vector ID for a channel.
@@ -173,6 +242,7 @@ class ChannelManager:
         except:
             return False
 
+    @session_commit
     def set_best_moe(self, channel_id: str, best_moe: float) -> bool:
         """
         Set the best MOE for a channel.
@@ -189,6 +259,7 @@ class ChannelManager:
         except:
             return False
 
+    @session_commit
     def set_minimization_attempts(self, channel_id: str, minimization_attempts: int) -> bool:
         """
         Set the number of minimization attempts for a channel.
@@ -205,6 +276,7 @@ class ChannelManager:
         except:
             return False        
 
+    @session_commit
     def increase_runs_spawned(self, channel_id : str, n : int =1) -> bool:
         """
         Increase the number of runs spawned by n.
@@ -221,6 +293,7 @@ class ChannelManager:
         except:
             return False        
 
+    @session_commit
     def increase_runs_completed(self, channel_id : str, n : int =1) -> bool:
         """
         Increase the number of runs completed by n.
@@ -242,6 +315,7 @@ class ChannelManager:
     #      Actions       #
     ######################
 
+    @session_commit
     def create_channel(self, input_dimension: int, output_dimension: int, num_kraus: int) -> str:
         """
         Create a new channel. Connect to database and create a new channel.
@@ -257,6 +331,7 @@ class ChannelManager:
         except:
             return None
         
+    @session_commit
     def create_channel_from_kraus(self, kraus_id: str, input_dimension: int, output_dimension: int, num_kraus: int) -> str:
         """
         Create a new channel from a Kraus operator. Connect to database and create a new channel.
@@ -273,6 +348,7 @@ class ChannelManager:
         except:
             return None
         
+    @session_commit
     def schedule_jobs(self) -> bool:
         """
         Schedule jobs for all channels. Connect to database and schedule jobs for all channels.
@@ -327,6 +403,7 @@ class ChannelManager:
                 continue
         return True
     
+    @session_commit
     def update_MOE(self):
         """
         Update the best MOE for all channels. Connect to database and update the best MOE for all channels.
@@ -350,7 +427,7 @@ class ChannelManager:
                     # If the job is a minimization job, get its current entropy
                     if JobType(job.job_type) == JobType.minimize:
                         # Get the entropy from the job
-                        entropy = self.job_manager.get_entropy(job.id)
+                        entropy = self.job_manager.get_entropy(job.id)["entropy"]
                         if not entropy:
                             print("No entropy found for job ", job.id)
                             break
@@ -369,6 +446,7 @@ class ChannelManager:
                 
         return True
 
+    @session_commit
     def process_completed_jobs(self):
         """
         Process completed jobs in redis queue.
@@ -379,7 +457,12 @@ class ChannelManager:
             - If the number of runs completed is equal to the number of minimization attempts, set the channel status to completed.
         """           
         # Step 1: obtain all jobs in the redis queue
-        while (jid := int(self.redis.lpop("to_process"))) is not None:
+        while (jid := self.redis.lpop("to_process")) is not None:
+            try:
+                jid = int(jid)
+            except ValueError:
+                print("Error parsing job ID from redis queue...")
+                continue
             # Get the job from the database
             type = self.job_manager.get_job_type(jid)
             if type:

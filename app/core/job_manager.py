@@ -3,20 +3,86 @@ from app.models.job import Job, JobStatus, JobType
 import redis
 import datetime
 from app.core.config import JobManagerConfig
-from app.db.base import SessionLocal
+from app.db.base import SessionFactory
 from app.core.redis import redis_client
+from functools import wraps
+from sqlalchemy.exc import SQLAlchemyError, OperationalError, IntegrityError, DataError
+import time
+
 
 class JobManager:
-    def __init__(self, db: Session, redis_client: redis.Redis, config: JobManagerConfig = JobManagerConfig()):
-        # Persistent storage
-        self.db = db
+    def __init__(self, redis_client: redis.Redis, config: JobManagerConfig = JobManagerConfig()):
+        self.db = None # Database session, this is set using the _get_session method
         # In-memory storage (fast access, queue)
         self.redis = redis_client
         # Sync the jobs in the database with the Redis queue
         self.sync_jobs()
         # Configuration
         self.config = config
+    
+    # JobManager does not have direct access to the get_db method, instead it has its own session management method.
 
+    ############################
+    # Session management methods
+    ############################
+
+
+    def _get_session(self):
+        """Get a new database session. Handle Exceptions"""
+        try:
+            self.db = SessionFactory()
+            return self.db
+        except Exception as e:
+            print(f"Failed to get a session: {e}")
+            return None
+        
+    def session_commit(func):
+        """Decorator to handle session commit, rollback, and logging."""
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            session = self._get_session()  # Ensure a session exists
+
+            try:
+                result = func(self, *args, **kwargs)  # Call the original method
+                session.commit()  # Commit the transaction
+                return result
+            except IntegrityError as e:
+                # Handle IntegrityError (e.g., foreign key violations, unique constraint violations)
+                session.rollback()
+                print(f"Integrity error in method {func.__name__}: {str(e)}")
+                raise
+            except OperationalError as e:
+                # Handle OperationalError (e.g., connection issues, timeouts)
+                session.rollback()
+                print(f"Operational error in method {func.__name__}: {str(e)}")
+                raise
+            except DataError as e:
+                # Handle DataError (e.g., invalid data types, out-of-range values)
+                session.rollback()
+                print(f"Data error in method {func.__name__}: {str(e)}")
+                raise
+            except SQLAlchemyError as e:
+                # Catch any other SQLAlchemy-related errors
+                session.rollback()
+                print(f"SQLAlchemy error in method {func.__name__}: {str(e)}")
+                raise
+            except Exception as e:
+                # Catch any other unexpected errors
+                session.rollback()
+                print(f"Unexpected error in method {func.__name__}: {str(e)}")
+                raise
+            finally:
+                session.close()  # Always close the session after use
+
+        return wrapper
+
+
+
+    ############################
+    # Job management logic
+    ############################
+
+    @session_commit
     def manage_jobs(self):
         '''
         Manage the jobs in the database. This function is called periodically to check the status of jobs and workers.
@@ -44,6 +110,7 @@ class JobManager:
             if job.time_started + datetime.timedelta(seconds=self.config.job_running_ttl) < datetime.datetime.now():
                 self.restart_job(job.id)
 
+    @session_commit
     def sync_jobs(self):
         '''
         Sync the jobs in the database with the Redis queue. This can be expensive if there are many jobs.
@@ -72,7 +139,12 @@ class JobManager:
                 continue
         else:
             print("No non-pending jobs to remove from the Redis queue.")
-                            
+
+    #############################
+    # Job creation and assignment
+    #############################
+
+    @session_commit         
     def create_job(self, job_type: JobType, input_data: dict, kraus_operators: str = None, vector: str = None, channel_id: int = -1):
         """Create a new job and queue it."""
         if job_type == JobType.minimize:
@@ -105,6 +177,7 @@ class JobManager:
         self.redis.rpush("job_queue", new_job.id)
         return new_job
 
+    @session_commit         
     def assign_job_to_worker(self, worker_id: str):
             """Assign a job to an available worker."""
             print("Assigning job to worker:", worker_id)
@@ -142,6 +215,10 @@ class JobManager:
             print("Job assigned to worker:", worker_id)
             return job
 
+    ############################
+    #          Getters
+    ############################
+    @session_commit
     def get_assigned_worker(self, job_id: int):
         """Get the worker assigned to a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -149,6 +226,7 @@ class JobManager:
             return None
         return {"id": job.worker_id}
 
+    @session_commit
     def get_job_status(self, job_id: int):
         """Retrieve job status by ID."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -156,6 +234,7 @@ class JobManager:
             return None
         return {"id": job.id, "status": job.status.value}
 
+    @session_commit
     def get_job_type(self, job_id: int):
         """Retrieve job type by ID."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -163,6 +242,7 @@ class JobManager:
             return None
         return {"job_type": job.job_type}
 
+    @session_commit
     def get_kraus(self, job_id: int):
         """Retrieve the Kraus operator for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -170,6 +250,7 @@ class JobManager:
             return None
         return {"kraus_operator": job.kraus_operator}
 
+    @session_commit
     def get_vector(self, job_id: int):
         """Retrieve the vector for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -177,6 +258,7 @@ class JobManager:
             return None
         return {"vector": job.vector} 
 
+    @session_commit
     def get_input_data(self, job_id: int):
         """Retrieve the vector for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -184,13 +266,15 @@ class JobManager:
             return None
         return {"input_data": job.input_data} 
 
+    @session_commit
     def get_entropy(self, job_id: int):
         """Retrieve the entropy for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
         if not job:
             return None
         return {"entropy": job.entropy} 
-    
+
+    @session_commit
     def get_channel(self, job_id: int):
         """Retrieve the channel for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -198,6 +282,11 @@ class JobManager:
             return None
         return {"channel_id": job.channel_id} 
 
+    ############################
+    #         Setters
+    ############################
+
+    @session_commit
     def update_job_status(self, job_id: int, status: JobStatus):
         """Update the status of a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -208,6 +297,7 @@ class JobManager:
         self.db.commit()
         return job
 
+    @session_commit
     def update_kraus(self, job_id: int, kraus: str):
         """Update the Kraus operator for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -218,6 +308,7 @@ class JobManager:
         self.db.commit()
         return job
 
+    @session_commit
     def update_vector(self, job_id: int, vector: str):
         """Update the vector for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -226,6 +317,7 @@ class JobManager:
         self.db.commit()
         return job
 
+    @session_commit
     def update_iterations(self, job_id: int, num_iterations: int):
         """Update the number of iterations for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -236,6 +328,7 @@ class JobManager:
         self.db.commit()
         return job
     
+    @session_commit
     def update_entropy(self, job_id: int, entropy: float):
         """Update the entropy for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -246,6 +339,7 @@ class JobManager:
         self.db.commit()
         return job
 
+    @session_commit
     def update_channel(self, job_id: int, channel_id: int):
         """Update the entropy for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -256,7 +350,7 @@ class JobManager:
         self.db.commit()
         return job
 
-
+    @session_commit
     def complete_job(self, job_id: int):
         """Mark a job as completed. Add it to redis for the channel manager to process."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -269,6 +363,7 @@ class JobManager:
         self.redis.rpush("to_process", job.id)
         return job  
 
+    @session_commit
     def restart_job(self, job_id: int):
         """Restart a job that was previously paused."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -280,6 +375,7 @@ class JobManager:
         self.redis.rpush("job_queue", job.id)
         return job
 
+    @session_commit
     def ping_worker(self, worker_id: str, job_id: int):
         """Update the last ping time for a worker."""
         job = self.db.query(Job).filter(Job.worker_id == worker_id).filter(Job.status == JobStatus.running).filter(Job.id == job_id).first()
@@ -290,10 +386,11 @@ class JobManager:
         job.last_update = datetime.datetime.now()
         self.db.commit()
         return job
+
 # ------------------------------
 # Job Manager logic
 # ------------------------------
 
-job_manager = JobManager(SessionLocal(), redis_client)
+job_manager = JobManager(redis_client)
 
 
