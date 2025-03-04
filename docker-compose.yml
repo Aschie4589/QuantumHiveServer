@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:latest
-    container_name: quantumhive_db
     deploy:
       restart_policy:
         condition: on-failure
@@ -18,8 +17,9 @@ services:
       - quantum_hive_network  # Connect to the custom network to ensure no outside access
   redis:
     image: redis:latest
-    container_name: quantumhive_redis
-    restart: always
+    deploy:
+      restart_policy:
+        condition: on-failure
     networks:
       - quantum_hive_network  # Connect to the custom network to ensure no outside access
 
@@ -28,6 +28,9 @@ services:
     image: quantumhive/uvicorn-server:latest
     volumes:
       - minimizer_data:/data  # Persistent storage for vector files
+    deploy:
+      restart_policy:
+        condition: on-failure
     secrets:
       - db_password
       - jwt_secret

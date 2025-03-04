@@ -6,7 +6,7 @@ if [ $(docker secret ls | grep db_password | wc -l) -gt 0 ]; then
     echo "DB secret already exists. Skipping creation."
     exit 0
 else
-    echo "DB secret does not exist. Creating secret."
+    echo "DB secret does not exist. Creating secret:"
     # Generate a random 256-byte secret. TODO: Change this to a more secure method.
     SECRET=$(openssl rand -base64 32)
 
@@ -21,7 +21,7 @@ if [ $(docker secret ls | grep jwt_secret | wc -l) -gt 0 ]; then
     echo "JWT secret already exists. Skipping creation."
     exit 0
 else
-    echo "JWT secret does not exist. Creating secret."
+    echo "JWT secret does not exist. Creating secret:"
     # Generate a random 256-byte secret. TODO: Change this to a more secure method.
     SECRET=$(openssl rand -base64 32)
 
@@ -31,10 +31,15 @@ else
 
 fi
 
-docker secret ls
 
-# Build the images
-docker build -t quantumhive/uvicorn-server .
+# Check if the image already exists
+if [[ "$(docker images -q quantumhive/uvicorn-server 2> /dev/null)" == "" ]]; then
+    echo "Uvicorn image quantumhive/uvicorn-server not found. Building the image..."
+    docker build -t quantumhive/uvicorn-server .
+    echo "Uvicorn image built successfully."
+else
+    echo "Uvicorn image (quantumhive/uvicorn-server) already exists. Skipping build."
+fi
 
 # Deploy the stack
 docker stack deploy -c docker-compose.yml quantum_hive_stack
@@ -59,4 +64,8 @@ while [ $TRIES -gt 0 ]; do
     ((TRIES--))
 done
 
-echo "Postgres is not running or could not be found after multiple attempts. Skipping password change."
+echo "Postgres is not running or could not be found after multiple attempts. Skipping password change: the server will not be able to connect to the database. Will shut down the stack."
+
+# Run ./stop
+./stop.sh
+exit 1
