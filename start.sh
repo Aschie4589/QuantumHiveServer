@@ -90,5 +90,5 @@ done
 echo "Postgres is not running or could not be found after multiple attempts. Skipping password change: the server will not be able to connect to the database. Will shut down the stack."
 
 # Run ./stop
-./stop.sh
+#./stop.sh
 exit 1
