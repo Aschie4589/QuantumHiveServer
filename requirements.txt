@@ -1,3 +1,4 @@
+libpq-dev
 fastapi==0.115.8
 psycopg2-binary  
 pydantic==2.4.2
