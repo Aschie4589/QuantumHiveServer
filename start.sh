@@ -32,13 +32,30 @@ else
 fi
 
 
-# Check if the image already exists
-if [[ "$(docker images -q quantumhive/uvicorn-server 2> /dev/null)" == "" ]]; then
-    echo "Uvicorn image quantumhive/uvicorn-server not found. Building the image..."
-    docker build -t quantumhive/uvicorn-server .
+# Check if the image exists
+IMAGE_NAME="quantumhive/uvicorn-server"
+
+if [[ "$(docker images -q $IMAGE_NAME 2> /dev/null)" == "" ]]; then
+    echo "Uvicorn image $IMAGE_NAME not found. Building the image..."
+    docker build -t $IMAGE_NAME .
     echo "Uvicorn image built successfully."
 else
-    echo "Uvicorn image (quantumhive/uvicorn-server) already exists. Skipping build."
+    echo "Uvicorn image ($IMAGE_NAME) already exists. Checking for updates..."
+
+    # Check if local files changed since the last build
+    if [[ -f .docker_last_build ]]; then
+        CHANGED_FILES=$(find ./app -type f -newer .docker_last_build)
+    else
+        CHANGED_FILES="force_rebuild"  # First-time force rebuild
+    fi
+
+    if [[ ! -z "$CHANGED_FILES" ]]; then
+        echo "Changes detected in local files. Rebuilding the image..."
+        docker build --no-cache -t $IMAGE_NAME .
+        touch .docker_last_build  # Update the timestamp
+    else
+        echo "No changes detected. Skipping build."
+    fi
 fi
 
 # Deploy the stack

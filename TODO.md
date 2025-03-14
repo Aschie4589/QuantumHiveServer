@@ -10,8 +10,8 @@
 
 - API endpoints for
     - *OK: Asking for a job*
-    - Downloading kraus operators
-    - Downloading vectors
+    - *OK: Downloading kraus operators
+    - *OK: Downloading vectors
     - *OK: Uploading vectors*
     - *OK: Uploading kraus*
     - Seeing stats for the current channel

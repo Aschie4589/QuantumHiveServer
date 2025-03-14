@@ -30,50 +30,49 @@ class JobManager:
     def _get_session(self):
         """Get a new database session. Handle Exceptions"""
         try:
-            self.db = SessionFactory()
-            return self.db
+            session = SessionFactory()
+            return session
         except Exception as e:
-            print(f"Failed to get a session: {e}")
             return None
         
-    def session_commit(func):
-        """Decorator to handle session commit, rollback, and logging."""
+    def ensure_session(func):
+        """Decorator to handle session rollback, and logging."""
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            session = self._get_session()  # Ensure a session exists
-
+            self.db = self._get_session() # Get a new session
             try:
                 result = func(self, *args, **kwargs)  # Call the original method
-                session.commit()  # Commit the transaction
+                # no commit here, only commit in the called method
                 return result
             except IntegrityError as e:
                 # Handle IntegrityError (e.g., foreign key violations, unique constraint violations)
-                session.rollback()
                 print(f"Integrity error in method {func.__name__}: {str(e)}")
+                self.db.rollback()
                 raise
             except OperationalError as e:
                 # Handle OperationalError (e.g., connection issues, timeouts)
-                session.rollback()
                 print(f"Operational error in method {func.__name__}: {str(e)}")
+                self.db.rollback()
                 raise
             except DataError as e:
                 # Handle DataError (e.g., invalid data types, out-of-range values)
-                session.rollback()
                 print(f"Data error in method {func.__name__}: {str(e)}")
+                self.db.rollback()
                 raise
             except SQLAlchemyError as e:
                 # Catch any other SQLAlchemy-related errors
-                session.rollback()
                 print(f"SQLAlchemy error in method {func.__name__}: {str(e)}")
+                self.db.rollback()
                 raise
             except Exception as e:
                 # Catch any other unexpected errors
-                session.rollback()
                 print(f"Unexpected error in method {func.__name__}: {str(e)}")
+                self.db.rollback()
                 raise
             finally:
-                session.close()  # Always close the session after use
-
+                if self.db:
+                    self.db.close()  # Always close the session after use
+                    self.db = None
         return wrapper
 
 
@@ -82,7 +81,6 @@ class JobManager:
     # Job management logic
     ############################
 
-    @session_commit
     def manage_jobs(self):
         '''
         Manage the jobs in the database. This function is called periodically to check the status of jobs and workers.
@@ -90,34 +88,54 @@ class JobManager:
         - Mark jobs of workers that have not pinged the server in a while as available
         - Restart paused jobs that have exceeded the pause TTL
         - Restart running jobs that have exceeded the running TTL
+        - Restart canceled jobs
         '''
-        running_jobs = self.db.query(Job).filter(Job.status == JobStatus.running).all()
-        paused_jobs = self.db.query(Job).filter(Job.status == JobStatus.paused).all()
+        print("Now managing jobs...!")
+        # get a new session (this has to be separate from db, since that is used in the individual methods)
+        session = self._get_session()
+        if not session:
+            print("Failed to get a session.")
+            return
+        running_jobs = session.query(Job).filter(Job.status == JobStatus.running).all()
+        paused_jobs = session.query(Job).filter(Job.status == JobStatus.paused).all()
+        canceled_jobs = session.query(Job).filter(Job.status == JobStatus.canceled).all()
         # Mark jobs of workers that have not pinged the server in a while as available
         for job in running_jobs:
             if job.last_update + datetime.timedelta(seconds=self.config.job_ping_ttl) < datetime.datetime.now():
-                job.status = JobStatus.pending
-                job.last_update = datetime.datetime.now()
-                self.db.commit()
+                print(f"Worker {job.worker_id} has not pinged the server in a while. Marking job as available.")
+                self.restart_job(job.id)
         # Restart paused jobs that have exceeded the pause TTL
         # TODO: notify the user?
         for job in paused_jobs:
             if job.time_started + datetime.timedelta(seconds=self.config.job_paused_ttl) < datetime.datetime.now():
+                print(f"Job {job.id} has been paused for too long. Restarting.")
                 self.restart_job(job.id)
         # Restart running jobs that have exceeded the running TTL
         # TODO: notify the user?
         for job in running_jobs:
             if job.time_started + datetime.timedelta(seconds=self.config.job_running_ttl) < datetime.datetime.now():
+                print(f"Job {job.id} has been running for too long. Restarting.")
                 self.restart_job(job.id)
+        # Reschedule cancelled jobs. Simply spawn a new job with the same information.
+        for job in canceled_jobs:
+            print(f"Job {job.id} was canceled. Restarting.")
+            self.create_job(job.job_type, job.input_data, job.kraus_operator, job.vector, job.channel_id)
 
-    @session_commit
+#            self.restart_job(job.id)
+        print("Job management complete.")
+        # Close the session
+        session.close()
+
+
     def sync_jobs(self):
         '''
         Sync the jobs in the database with the Redis queue. This can be expensive if there are many jobs.
         The goal is to ensure that all pending jobs are in the Redis queue and that the queue does not contain jobs that are no longer pending.
         '''
+        print("Syncing jobs...")
+        session = self._get_session()
         # Make sure all pending jobs are in the Redis queue
-        pending_jobs = self.db.query(Job).filter(Job.status == JobStatus.pending).all()
+        pending_jobs = session.query(Job).filter(Job.status == JobStatus.pending).all()
         # Add pending jobs to the Redis queue if they are not already there
         for job in pending_jobs:
             if not self.redis.lrange("job_queue", 0, -1):
@@ -133,18 +151,19 @@ class JobManager:
         for job_id in job_queue:
             #cast to int
             job_id = int(job_id)
-            job = self.db.query(Job).filter(Job.id == job_id).first()
+            job = session.query(Job).filter(Job.id == job_id).first()
             if job.status != JobStatus.pending:
                 self.redis.lrem("job_queue", 0, job_id)
                 continue
         else:
             print("No non-pending jobs to remove from the Redis queue.")
+        session.close()
+        print("Job sync complete.")
 
     #############################
     # Job creation and assignment
     #############################
 
-    @session_commit         
     def create_job(self, job_type: JobType, input_data: dict, kraus_operators: str = None, vector: str = None, channel_id: int = -1):
         """Create a new job and queue it."""
         if job_type == JobType.minimize:
@@ -169,15 +188,20 @@ class JobManager:
             return None
         new_job.last_update = datetime.datetime.now()
         new_job.time_created = datetime.datetime.now()
-        self.db.add(new_job)
-        self.db.commit()
-        self.db.refresh(new_job)
+
+        # Add job to the database
+        session = self._get_session()
+        session.add(new_job)
+        session.commit()
+        session.refresh(new_job)
+        session.close()
 
         # Add job to Redis queue
         self.redis.rpush("job_queue", new_job.id)
         return new_job
+    
 
-    @session_commit         
+    @ensure_session         
     def assign_job_to_worker(self, worker_id: str):
             """Assign a job to an available worker."""
             print("Assigning job to worker:", worker_id)
@@ -190,7 +214,8 @@ class JobManager:
             print("Job ID:", job_id)
 
             # Lock the job and mark it as 'running' in the database
-            job = self.db.query(Job).filter(Job.id == job_id).first()
+            session = self._get_session()
+            job = session.query(Job).filter(Job.id == job_id).first()
 
             if not job:
                 # Database inconsistency: job in the queue but not in the database
@@ -211,14 +236,15 @@ class JobManager:
             job.worker_id = worker_id  # Assign the job to the worker
             job.time_started = datetime.datetime.now()
             job.last_update = datetime.datetime.now()
-            self.db.commit()
+            session.commit()
+            session.close()
             print("Job assigned to worker:", worker_id)
             return job
 
     ############################
     #          Getters
     ############################
-    @session_commit
+    @ensure_session
     def get_assigned_worker(self, job_id: int):
         """Get the worker assigned to a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -226,7 +252,7 @@ class JobManager:
             return None
         return {"id": job.worker_id}
 
-    @session_commit
+    @ensure_session
     def get_job_status(self, job_id: int):
         """Retrieve job status by ID."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -234,7 +260,7 @@ class JobManager:
             return None
         return {"id": job.id, "status": job.status.value}
 
-    @session_commit
+    @ensure_session
     def get_job_type(self, job_id: int):
         """Retrieve job type by ID."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -242,7 +268,7 @@ class JobManager:
             return None
         return {"job_type": job.job_type}
 
-    @session_commit
+    @ensure_session
     def get_kraus(self, job_id: int):
         """Retrieve the Kraus operator for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -250,7 +276,7 @@ class JobManager:
             return None
         return {"kraus_operator": job.kraus_operator}
 
-    @session_commit
+    @ensure_session
     def get_vector(self, job_id: int):
         """Retrieve the vector for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -258,7 +284,7 @@ class JobManager:
             return None
         return {"vector": job.vector} 
 
-    @session_commit
+    @ensure_session
     def get_input_data(self, job_id: int):
         """Retrieve the vector for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -266,7 +292,7 @@ class JobManager:
             return None
         return {"input_data": job.input_data} 
 
-    @session_commit
+    @ensure_session
     def get_entropy(self, job_id: int):
         """Retrieve the entropy for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -274,7 +300,7 @@ class JobManager:
             return None
         return {"entropy": job.entropy} 
 
-    @session_commit
+    @ensure_session
     def get_channel(self, job_id: int):
         """Retrieve the channel for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -286,7 +312,7 @@ class JobManager:
     #         Setters
     ############################
 
-    @session_commit
+    @ensure_session
     def update_job_status(self, job_id: int, status: JobStatus):
         """Update the status of a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -297,7 +323,7 @@ class JobManager:
         self.db.commit()
         return job
 
-    @session_commit
+    @ensure_session
     def update_kraus(self, job_id: int, kraus: str):
         """Update the Kraus operator for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -308,7 +334,7 @@ class JobManager:
         self.db.commit()
         return job
 
-    @session_commit
+    @ensure_session
     def update_vector(self, job_id: int, vector: str):
         """Update the vector for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -317,7 +343,7 @@ class JobManager:
         self.db.commit()
         return job
 
-    @session_commit
+    @ensure_session
     def update_iterations(self, job_id: int, num_iterations: int):
         """Update the number of iterations for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -328,7 +354,7 @@ class JobManager:
         self.db.commit()
         return job
     
-    @session_commit
+    @ensure_session
     def update_entropy(self, job_id: int, entropy: float):
         """Update the entropy for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -339,7 +365,7 @@ class JobManager:
         self.db.commit()
         return job
 
-    @session_commit
+    @ensure_session
     def update_channel(self, job_id: int, channel_id: int):
         """Update the entropy for a job."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -350,7 +376,7 @@ class JobManager:
         self.db.commit()
         return job
 
-    @session_commit
+    @ensure_session
     def complete_job(self, job_id: int):
         """Mark a job as completed. Add it to redis for the channel manager to process."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -363,7 +389,7 @@ class JobManager:
         self.redis.rpush("to_process", job.id)
         return job  
 
-    @session_commit
+    @ensure_session
     def restart_job(self, job_id: int):
         """Restart a job that was previously paused."""
         job = self.db.query(Job).filter(Job.id == job_id).first()
@@ -375,7 +401,7 @@ class JobManager:
         self.redis.rpush("job_queue", job.id)
         return job
 
-    @session_commit
+    @ensure_session
     def ping_worker(self, worker_id: str, job_id: int):
         """Update the last ping time for a worker."""
         job = self.db.query(Job).filter(Job.worker_id == worker_id).filter(Job.status == JobStatus.running).filter(Job.id == job_id).first()

@@ -240,11 +240,16 @@ def cancel_job(job_id: str = Form(...), current_user: dict = Depends(get_current
     # user is authorized.
     # check that the job was running
     if j["status"] != "running" and j["status"] != "paused":
+        print("Trying to cancel job that is not running or paused.")
+        print("Job status:", j["status"])
+        print("Job id:", job_id)
         raise HTTPException(status_code=400, detail="Job is not running or paused.")
     
     # mark the job as canceled
     j = job_manager.update_job_status(job_id, JobStatus.canceled)
     if not j:
+        print("Job cancel failed.")
+        print("Job", j)
         raise HTTPException(status_code=400, detail="Job cancel failed.")
     return {"result": "success"}
 
