@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir --upgrade pip
 
 # Install the required system packages
 RUN apt-get update
-RUN sudo apt-get install libpq-dev
+RUN apt-get install -y libpq-dev gcc
 
 # Install dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
