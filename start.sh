@@ -1,3 +1,15 @@
+# Detect docker
+if ! [ -x "$(command -v docker)" ]; then
+    echo "Docker is not installed. Please install Docker before running this script."
+    exit 1
+fi
+
+# Detect docker-compose
+if ! [ -x "$(command -v docker-compose)" ]; then
+    echo "Docker Compose is not installed. Please install Docker Compose before running this script."
+    exit 1
+fi
+
 # Setup swarming
 docker swarm init
 
