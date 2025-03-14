@@ -9,6 +9,7 @@ services:
     environment:
       POSTGRES_USER: quantumhive
       POSTGRES_DB: quantumhive
+      POSTGRES_PASSWORD: quantumhive # Set a default password
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password  # Point to secret
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent storage
