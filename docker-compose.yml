@@ -40,8 +40,10 @@ services:
       - db  # Ensure the database is started before the Uvicorn service
       - redis  # Ensure Redis is started before the Uvicorn service
     ports:
-      - "8000:8000"  # Expose the Uvicorn server on port 8000
-    networks:
+      - target: 8000  # Expose container's port 8000
+        published: 8000  # Bind it to host's port 8000
+        protocol: tcp
+        mode: host  # Use host network mode    networks:
       - quantum_hive_network # Connect to the custom network to ensure no outside access
 
 networks:
