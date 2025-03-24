@@ -122,7 +122,7 @@ def request_upload(current_user: dict = Depends(get_current_user), response_mode
     return generate_upload_link(current_user)
 
 
-@router.post("/upload/{token}")
+@router.post("/uploa2/{token}")
 async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     async with aiofiles.open(os.path.join(cfg.save_path, "prova123.dat"), "wb") as out_file:
         chunk_count = 0  # Track number of chunks
@@ -137,7 +137,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
         
     
 
-@router.post("/upload2/{token}")
+@router.post("/upload/{token}")
 async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     """
     Securely upload a file using a one-time token. TODO: validate the file!!!
