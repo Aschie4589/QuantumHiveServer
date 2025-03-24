@@ -173,11 +173,12 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
         async with aiofiles.open(file_path, "wb") as out_file:
             print("File received, saving to disk...", flush=True)
             chunk_count = 0  # Track number of chunks
-            while True:
+            file_available = True
+            while file_available:
                 chunk = await file.read(cfg.chunk_size)
                 if not chunk:
                     print(f"End of file reached after {chunk_count} chunks", flush=True)
-                    break
+                    file_available = False
                 chunk_count += 1
                 print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
                 await out_file.write(chunk)
