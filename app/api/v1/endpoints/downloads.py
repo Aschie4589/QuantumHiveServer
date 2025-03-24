@@ -127,7 +127,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     """
     Securely upload a file using a one-time token. TODO: validate the file!!!
     """
-    print("DEBUG!!!")
+    print("DEBUG!!! should see this statements?")
     print("File being uploaded")
     # Step 1: Retrieve and validate the token from Redis
     token_data = redis_client.get(token)
