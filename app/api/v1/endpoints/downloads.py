@@ -16,7 +16,7 @@ import os
 from app.core.config import FileHandlingConfig
 import aiofiles
 from app.core.job_manager import job_manager
-
+import datetime
 router = APIRouter()
 cfg = FileHandlingConfig()
 import json
@@ -127,8 +127,14 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     """
     Securely upload a file using a one-time token. TODO: validate the file!!!
     """
-    print("DEBUG!!! should see this statements?")
-    print("File being uploaded")
+    # Do simple logging to ./log.log
+    #log "DEBUG"
+    with open("log.log","a") as f:
+        #print timestamp
+        f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
+        f.write("DEBUG!!! should see this statements?\n")
+        f.write("File being uploaded\n")
+
     # Step 1: Retrieve and validate the token from Redis
     token_data = redis_client.get(token)
     if not token_data:
@@ -136,8 +142,13 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
 
     token_info = json.loads(token_data)
     user_id = token_info["user_id"]
-    print("user_id",user_id)
-    print("current_user",current_user["sub"])
+    with open("log.log","a") as f:
+        f.write("user_id\n")
+        f.write(user_id)
+        f.write("\n")
+        f.write("current_user\n")
+        f.write(current_user["sub"])
+        f.write("\n")
 
     # Step 2: Ensure the requesting user matches the token user
     if user_id != current_user["sub"]:
@@ -155,17 +166,31 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     file_path = os.path.join(cfg.save_path, unique_filename)
 
     try:
+        with open("log.log","a") as f:
+            f.write("file_path\n")
+            f.write(file_path)
+            f.write("\n")
+            f.write("unique_id\n")
+            f.write(unique_id)
+            f.write("\n")
+            f.write("file_type\n")
+            f.write(file_type)
+            f.write("\n")
+            f.write("job_id\n")
+            f.write(job_id)
+            f.write("\n")
         # ensure path exists
         os.makedirs(cfg.save_path, exist_ok=True)
-        print("Made directory")
-        print("file_path",file_path)
-        print("cfg.save_path",cfg.save_path)
         # Save the file, read chunks
         async with aiofiles.open(file_path, "wb") as out_file:
             while chunk := await file.read(cfg.chunk_size): # read in chunks
-                print("Chunk read")
+                with open("log.log","a") as f:
+                    f.write("Chunk read\n")
+                    f.write(chunk)
+                    f.write("\n")
                 await out_file.write(chunk)
-        print("File saved")
+        with open("log.log","a") as f:
+            f.write("File saved\n")
         # Step 4: Store file metadata in the database
         new_file = File(id=unique_id, type=file_type, full_path=file_path)
         db.add(new_file)
@@ -176,10 +201,6 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
         redis_client.delete(token)
 
         # Step 6: update the job entry corresponding to the job_id with the file id
-        # pruint debug
-        print("job_id",job_id)
-        print("file_type",file_type)
-        print("unique_id",unique_id)
         
         try:
             file_type_enum = FileTypeEnum(file_type)
@@ -200,5 +221,6 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
 
     except Exception as e:
         # Handle failure by logging (token remains valid for retry)
+        print("Error",str(e))
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
