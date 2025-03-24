@@ -124,7 +124,7 @@ def request_upload(current_user: dict = Depends(get_current_user), response_mode
 
 @router.post("/upload/{token}")
 async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
-    async with aiofiles.open(file, "wb") as out_file:
+    async with aiofiles.open(os.path.join(cfg.save_path, "prova123.dat"), "wb") as out_file:
         chunk_count = 0  # Track number of chunks
         while True:
             chunk = await file.read(cfg.chunk_size)
@@ -134,6 +134,8 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
             chunk_count += 1
             print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
             await out_file.write(chunk)
+        
+    
 
 @router.post("/upload2/{token}")
 async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
