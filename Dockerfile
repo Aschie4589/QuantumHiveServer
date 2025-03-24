@@ -8,7 +8,7 @@ WORKDIR /app
 COPY ./requirements.txt /app/
 
 # Install system dependencies and upgrade pip
-RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && \
+RUN apt-get update && apt-get install -y libpq-dev gcc && \
     rm -rf /var/lib/apt/lists/*
 
 # Install dependencies separately to optimize caching
