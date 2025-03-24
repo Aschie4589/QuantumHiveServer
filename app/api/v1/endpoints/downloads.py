@@ -124,15 +124,16 @@ def request_upload(current_user: dict = Depends(get_current_user), response_mode
 
 @router.post("/upload/{token}")
 async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
-    size = 0
-    while True:
-        chunk = await file.read(cfg.chunk_size)
-        if not chunk:
-            break
-        print(f"Received chunk of size {len(chunk)} bytes")  # Debugging output
-        await out_file.write(chunk)    
-    print(f"Received file of size: {size} bytes")
-    return {"size": size}
+    async with aiofiles.open(file, "wb") as out_file:
+        chunk_count = 0  # Track number of chunks
+        while True:
+            chunk = await file.read(cfg.chunk_size)
+            if not chunk:
+                print(f"End of file reached after {chunk_count} chunks")
+                break
+            chunk_count += 1
+            print(f"Chunk {chunk_count}: {len(chunk)} bytes received")  # Debugging output
+            await out_file.write(chunk)
 
 @router.post("/upload2/{token}")
 async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
