@@ -57,7 +57,7 @@ else
 
     if [[ ! -z "$CHANGED_FILES" ]]; then
         echo "Changes detected in local files. Rebuilding the image..."
-        docker build --no-cache -t $IMAGE_NAME .
+        docker build -t $IMAGE_NAME .
         touch .docker_last_build  # Update the timestamp
     else
         echo "No changes detected. Skipping build."
