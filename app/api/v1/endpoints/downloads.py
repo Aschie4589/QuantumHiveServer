@@ -129,7 +129,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     """
     # Do simple logging to ./log.log
     #log "DEBUG"
-    with open("log.log","a") as f:
+    with open("/app/log.log","a") as f:
         #print timestamp
         f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
         f.write("DEBUG!!! should see this statements?\n")
@@ -142,7 +142,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
 
     token_info = json.loads(token_data)
     user_id = token_info["user_id"]
-    with open("log.log","a") as f:
+    with open("/app/log.log","a") as f:
         f.write("user_id\n")
         f.write(user_id)
         f.write("\n")
@@ -166,7 +166,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     file_path = os.path.join(cfg.save_path, unique_filename)
 
     try:
-        with open("log.log","a") as f:
+        with open("/app/log.log","a") as f:
             f.write("file_path\n")
             f.write(file_path)
             f.write("\n")
@@ -184,12 +184,12 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
         # Save the file, read chunks
         async with aiofiles.open(file_path, "wb") as out_file:
             while chunk := await file.read(cfg.chunk_size): # read in chunks
-                with open("log.log","a") as f:
+                with open("/app/log.log","a") as f:
                     f.write("Chunk read\n")
                     f.write(chunk)
                     f.write("\n")
                 await out_file.write(chunk)
-        with open("log.log","a") as f:
+        with open("/app/log.log","a") as f:
             f.write("File saved\n")
         # Step 4: Store file metadata in the database
         new_file = File(id=unique_id, type=file_type, full_path=file_path)
