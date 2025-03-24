@@ -14,7 +14,7 @@ from app.core.redis import redis_client
 import json
 import os
 from app.core.config import FileHandlingConfig
-import shutil
+import aiofiles
 from app.core.job_manager import job_manager
 
 router = APIRouter()
@@ -142,9 +142,11 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
         raise HTTPException(status_code=403, detail="Unauthorized user")
 
     # Step 3: Save the file to the server. Extension is just .dat
+    # Obtain filename
     unique_filename = f"{uuid.uuid4()}.dat"
     unique_id = str(uuid.uuid4())[:8]
     file_path = os.path.join(cfg.save_path, unique_filename)
+
     try:
         job_manager.get_job_status
         jb = db.query(Job).filter(Job.id == job_id).first()
@@ -153,8 +155,10 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
         # ensure path exists
         os.makedirs(cfg.save_path, exist_ok=True)
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Save the file, read chunks
+        async with aiofiles.open(file_path, "wb") as out_file:
+            while chunk := await file.read(cfg.chunk_size): # read in chunks
+                await out_file.write(chunk)
 
         # Step 4: Store file metadata in the database
         new_file = File(id=unique_id, type=file_type, full_path=file_path)

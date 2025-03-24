@@ -12,6 +12,8 @@ class FileHandlingConfig:
     download_link_ttl: int = 60 * 5  # 5 minutes
     upload_link_ttl: int = 60 * 5  # 5 minutes
 
+    chunk_size: int = 1024 * 1024  # 1 MB
+
     save_path = "/data"  # Where files are stored
 
 @dataclass

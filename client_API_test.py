@@ -1,16 +1,20 @@
 import requests
 
+#api_url = "http://localhost:8000"
+api_url = "http://apiv1.quantum-hive.com"
+
+
 # Create a new user. Use JSON payload instead of form data
 print("Will create a new user now")
 user_data = {"username": "client", "password": "password", "email": "admin@test.com"}
-response = requests.post("http://192.168.0.17:8000/users/create", json=user_data)
+response = requests.post(f"{api_url}/users/create", json=user_data)
 print(response.json())  # Should print the new user info
 
 
 # Log in to get the token
 print("Will login with said user now")
 login_data = {"username": "admin", "password": "admin"}
-login_response = requests.post("http://localhost:8000/auth/login", data=login_data)
+login_response = requests.post(f"{api_url}/auth/login", data=login_data)
 login_info = login_response.json()
 print(login_info)  # Should print the token info
 access_token = login_info['access_token']
@@ -19,9 +23,9 @@ refresh_token = login_info['refresh_token']
 if True:
     # Create channel
     print("Will create a channel now")
-    channel_data = {"input_dimension": 400, "output_dimension": 400, "num_kraus": 20, "method": "haar"}
+    channel_data = {"input_dimension": 50, "output_dimension": 50, "num_kraus": 24, "method": "haar"}
     headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.post("http://localhost:8000/channels/create", data=channel_data, headers=headers)
+    response = requests.post(f"{api_url}/channels/create", data=channel_data, headers=headers)
     print(response)  # Should print the channel creation info
 
     
