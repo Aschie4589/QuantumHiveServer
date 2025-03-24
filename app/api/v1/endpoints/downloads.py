@@ -188,6 +188,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
                     f.write("Chunk read\n")
                     f.write(chunk)
                     f.write("\n")
+                print(f"Received chunk of size: {len(chunk)} bytes")
                 await out_file.write(chunk)
         with open("/app/log.log","a") as f:
             f.write("File saved\n")
