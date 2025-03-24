@@ -16,10 +16,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --user --no-warn-script-location -r requirements.txt
 
 # Copy the rest of the application (AFTER installing dependencies)
-COPY ./app ./app
+COPY ./app /app
 
-# Ensure Python can find the `app` module
-ENV PYTHONPATH=/app
+
 
 # Run the FastAPI app with Uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
