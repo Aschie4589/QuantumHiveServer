@@ -132,7 +132,7 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
                 print(f"End of file reached after {chunk_count} chunks")
                 break
             chunk_count += 1
-            print(f"Chunk {chunk_count}: {len(chunk)} bytes received")  # Debugging output
+            print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
             await out_file.write(chunk)
 
 @router.post("/upload2/{token}")
