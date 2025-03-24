@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install -r requirements.txt
 
 # Copy the rest of the application (AFTER installing dependencies)
-COPY ./app /app
+COPY ./app ./app
 
 # Ensure Python can find the `app` module
 ENV PYTHONPATH=/app
