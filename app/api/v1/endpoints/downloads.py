@@ -192,7 +192,7 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
         redis_client.delete(token)
 
         # Step 6: update the job entry corresponding to the job_id with the file id
-        
+        print("Committed to DB, updating job entry...", flush=True)        
         try:
             file_type_enum = FileTypeEnum(file_type)
         except ValueError:
