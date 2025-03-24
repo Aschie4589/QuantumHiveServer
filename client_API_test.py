@@ -2,8 +2,8 @@ import requests
 
 # Create a new user. Use JSON payload instead of form data
 print("Will create a new user now")
-user_data = {"username": "admin", "password": "admin", "email": "admin@test.com"}
-response = requests.post("http://localhost:8000/users/create", json=user_data)
+user_data = {"username": "client", "password": "password", "email": "admin@test.com"}
+response = requests.post("http://192.168.0.17:8000/users/create", json=user_data)
 print(response.json())  # Should print the new user info
 
 
