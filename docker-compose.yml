@@ -46,7 +46,7 @@ services:
 
 networks:
   quantum_hive_network:  # Define a custom network
-    driver: overlay
+    driver: bridge
 
 secrets:
   db_password:
