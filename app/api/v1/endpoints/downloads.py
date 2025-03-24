@@ -182,6 +182,7 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
                 chunk_count += 1
                 print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
                 await out_file.write(chunk)
+        print("File saved to disk: ", file_path, flush=True)
 
         # Step 4: Store file metadata in the database
         new_file = File(id=unique_id, type=file_type, full_path=file_path)
