@@ -142,13 +142,6 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
     """
     Securely upload a file using a one-time token. TODO: validate the file!!!
     """
-    # Do simple logging to ./log.log
-    #log "DEBUG"
-    with open("/app/log.log","a") as f:
-        #print timestamp
-        f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
-        f.write("DEBUG!!! should see this statements?\n")
-        f.write("File being uploaded\n")
 
     # Step 1: Retrieve and validate the token from Redis
     token_data = redis_client.get(token)
@@ -157,13 +150,6 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
 
     token_info = json.loads(token_data)
     user_id = token_info["user_id"]
-    with open("/app/log.log","a") as f:
-        f.write("user_id\n")
-        f.write(user_id)
-        f.write("\n")
-        f.write("current_user\n")
-        f.write(current_user["sub"])
-        f.write("\n")
 
     # Step 2: Ensure the requesting user matches the token user
     if user_id != current_user["sub"]:
@@ -181,32 +167,21 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
     file_path = os.path.join(cfg.save_path, unique_filename)
 
     try:
-        with open("/app/log.log","a") as f:
-            f.write("file_path\n")
-            f.write(file_path)
-            f.write("\n")
-            f.write("unique_id\n")
-            f.write(unique_id)
-            f.write("\n")
-            f.write("file_type\n")
-            f.write(file_type)
-            f.write("\n")
-            f.write("job_id\n")
-            f.write(job_id)
-            f.write("\n")
         # ensure path exists
         os.makedirs(cfg.save_path, exist_ok=True)
         # Save the file, read chunks
         async with aiofiles.open(file_path, "wb") as out_file:
-            while chunk := await file.read(cfg.chunk_size): # read in chunks
-                with open("/app/log.log","a") as f:
-                    f.write("Chunk read\n")
-                    f.write(chunk)
-                    f.write("\n")
-                print(f"Received chunk of size: {len(chunk)} bytes")
+            print("File received, saving to disk...", flush=True)
+            chunk_count = 0  # Track number of chunks
+            while True:
+                chunk = await file.read(cfg.chunk_size)
+                if not chunk:
+                    print(f"End of file reached after {chunk_count} chunks", flush=True)
+                    break
+                chunk_count += 1
+                print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
                 await out_file.write(chunk)
-        with open("/app/log.log","a") as f:
-            f.write("File saved\n")
+
         # Step 4: Store file metadata in the database
         new_file = File(id=unique_id, type=file_type, full_path=file_path)
         db.add(new_file)
