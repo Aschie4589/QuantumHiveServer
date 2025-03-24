@@ -124,6 +124,14 @@ def request_upload(current_user: dict = Depends(get_current_user), response_mode
 
 @router.post("/upload/{token}")
 async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
+    size = 0
+    async for chunk in file.file:
+        size += len(chunk)
+    print(f"Received file of size: {size} bytes")
+    return {"size": size}
+
+@router.post("/upload2/{token}")
+async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     """
     Securely upload a file using a one-time token. TODO: validate the file!!!
     """
