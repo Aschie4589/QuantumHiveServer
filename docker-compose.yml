@@ -43,12 +43,13 @@ services:
       - target: 8000  # Expose container's port 8000
         published: 8000  # Bind it to host's port 8000
         protocol: tcp
-        mode: host  # Use host network mode    networks:
+        mode: host  # Use host network mode    
+    networks:
       - quantum_hive_network # Connect to the custom network to ensure no outside access
 
 networks:
   quantum_hive_network:  # Define a custom network
-    driver: bridge
+    driver: overlay
 
 secrets:
   db_password:
