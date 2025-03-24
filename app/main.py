@@ -35,6 +35,7 @@ app = FastAPI(title="QuantumHiveAPI", lifespan=lifespan)
 
 
 
+
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
