@@ -63,4 +63,5 @@ app.add_middleware(
 def read_root():
     return {"message": "QuantumHive API is running!"}
 
+
 # Run with: uvicorn app.main:app --host 0.0.0.0 --port 8000

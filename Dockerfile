@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y libpq-dev gcc && \
 
 # Install dependencies separately to optimize caching
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --user --no-warn-script-location -r requirements.txt
+    pip install requirements.txt
 
 # Copy the rest of the application (AFTER installing dependencies)
 COPY ./app /app
