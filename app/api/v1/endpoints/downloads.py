@@ -122,12 +122,13 @@ def request_upload(current_user: dict = Depends(get_current_user), response_mode
     return generate_upload_link(current_user)
 
 
-
 @router.post("/upload/{token}")
 async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     """
     Securely upload a file using a one-time token. TODO: validate the file!!!
     """
+    print("DEBUG!!!")
+    print("File being uploaded")
     # Step 1: Retrieve and validate the token from Redis
     token_data = redis_client.get(token)
     if not token_data:
@@ -135,11 +136,17 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
 
     token_info = json.loads(token_data)
     user_id = token_info["user_id"]
-
+    print("user_id",user_id)
+    print("current_user",current_user["sub"])
 
     # Step 2: Ensure the requesting user matches the token user
     if user_id != current_user["sub"]:
         raise HTTPException(status_code=403, detail="Unauthorized user")
+
+    jb = db.query(Job).filter(Job.id == job_id).first()
+    if not jb:
+        raise HTTPException(status_code=404, detail="Job not found")
+
 
     # Step 3: Save the file to the server. Extension is just .dat
     # Obtain filename
@@ -148,18 +155,17 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     file_path = os.path.join(cfg.save_path, unique_filename)
 
     try:
-        job_manager.get_job_status
-        jb = db.query(Job).filter(Job.id == job_id).first()
-        if not jb:
-            raise HTTPException(status_code=404, detail="Job not found")
         # ensure path exists
         os.makedirs(cfg.save_path, exist_ok=True)
-
+        print("Made directory")
+        print("file_path",file_path)
+        print("cfg.save_path",cfg.save_path)
         # Save the file, read chunks
         async with aiofiles.open(file_path, "wb") as out_file:
             while chunk := await file.read(cfg.chunk_size): # read in chunks
+                print("Chunk read")
                 await out_file.write(chunk)
-
+        print("File saved")
         # Step 4: Store file metadata in the database
         new_file = File(id=unique_id, type=file_type, full_path=file_path)
         db.add(new_file)
