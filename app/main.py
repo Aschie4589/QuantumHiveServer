@@ -46,7 +46,6 @@ app.include_router(channels.router, prefix="/channels", tags=["channels"])
 # Create DB tables (if they don’t exist)
 Base.metadata.create_all(bind=engine)
 
-
 # CORS (Allow frontend access)
 app.add_middleware(
     CORSMiddleware,
