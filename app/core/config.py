@@ -15,6 +15,7 @@ class FileHandlingConfig:
     chunk_size: int = 1024 * 1024  # 1 MB
 
     save_path = "/data"  # Where files are stored
+    tmp_path = "/tmp"  # Where files are temporarily stored
 
 @dataclass
 class ChannelHandlingConfig:
