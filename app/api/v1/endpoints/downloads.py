@@ -138,13 +138,14 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
     
 
 @router.post("/upload/{token}")
-async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
+async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...), chunk_index: int = Form(...), total_chunks: int = Form(...), db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     """
-    Securely upload a file using a one-time token. TODO: validate the file!!!
+    Securely upload a file in chunks using a one-time token.
     """
 
     print("Upload request received", flush=True)
     print("Checking token...", flush=True)
+    
     # Step 1: Retrieve and validate the token from Redis
     token_data = redis_client.get(token)
     if not token_data:
@@ -163,68 +164,67 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
         raise HTTPException(status_code=404, detail="Job not found")
     print("Job found and user authorized", flush=True)
 
-    # Step 3: Save the file to the server. Extension is just .dat
-    # Obtain filename
+    # Step 3: Prepare for file upload
     unique_filename = f"{uuid.uuid4()}.dat"
     unique_id = str(uuid.uuid4())[:8]
     file_path = os.path.join(cfg.save_path, unique_filename)
 
     print("File path: ", file_path, flush=True)
+
+    # Ensure path exists
+    os.makedirs(cfg.save_path, exist_ok=True)
+    print("Path exists", flush=True)
+
+    # Step 4: Open the file in append mode to write chunks sequentially
     try:
-        # ensure path exists
-        os.makedirs(cfg.save_path, exist_ok=True)
-        print("Path exists", flush=True)
-        # Save the file, read chunks
-        print("Saving file...", flush=True)
-        async with aiofiles.open(file_path, "wb") as out_file:
-            print("Opened output file", flush=True)
-            chunk_count = 0  # Track number of chunks
-            file_available = True
-            while file_available:
-                chunk = await file.read(cfg.chunk_size)
-                if not chunk:
-                    print(f"End of file reached after {chunk_count} chunks", flush=True)
-                    file_available = False
-                chunk_count += 1
-                if file_available:
-                    print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
-                await out_file.write(chunk)
-                print(f"Chunk {chunk_count}: {len(chunk)} bytes written", flush=True)  # Debugging output
+        async with aiofiles.open(file_path, "ab") as out_file:  # Open in append mode
+            print(f"Opened file {file_path} in append mode", flush=True)
+            
+            # Write the received chunk
+            chunk_data = await file.read()  # Read the current chunk of data
+            await out_file.write(chunk_data)  # Append the chunk to the file
+            print(f"Chunk {chunk_index}/{total_chunks} written to {file_path}", flush=True)
 
+        # Step 5: If the last chunk is received, finalize the upload process
+        if chunk_index + 1 == total_chunks:
+            print("All chunks received, finalizing upload...", flush=True)
 
-        print("File saved to disk: ", file_path, flush=True)
-
-        # Step 4: Store file metadata in the database
-        new_file = File(id=unique_id, type=file_type, full_path=file_path)
-        db.add(new_file)
-        db.commit()
-        db.refresh(new_file)
-        print("DB entry created for file", flush=True)
-        # Step 5: Invalidate token (only after successful upload)
-        redis_client.delete(token)
-        print("Token invalidated", flush=True)
-        # Step 6: update the job entry corresponding to the job_id with the file id
-        try:
-            file_type_enum = FileTypeEnum(file_type)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid file type: {file_type}")
-
-        if file_type_enum == FileTypeEnum.kraus:
-            jb.kraus_operator = unique_id
-        elif file_type_enum == FileTypeEnum.vector:
-            jb.vector = unique_id
-        try:
+            # Store file metadata in the database
+            new_file = File(id=unique_id, type=file_type, full_path=file_path)
+            db.add(new_file)
             db.commit()
-            db.refresh(jb)
-            print("Job entry committed to DB", flush=True)        
-        except Exception as e:
-            db.rollback()  # Undo changes if commit fails
-            raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
-        print("Upload successful", flush=True)
-        return {"message": "Upload successful"}
+            db.refresh(new_file)
+            print("DB entry created for file", flush=True)
+
+            # Step 6: Invalidate token after successful upload
+            redis_client.delete(token)
+            print("Token invalidated", flush=True)
+
+            # Step 7: Update the job entry with the file ID
+            try:
+                file_type_enum = FileTypeEnum(file_type)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid file type: {file_type}")
+
+            if file_type_enum == FileTypeEnum.kraus:
+                jb.kraus_operator = unique_id
+            elif file_type_enum == FileTypeEnum.vector:
+                jb.vector = unique_id
+            
+            try:
+                db.commit()
+                db.refresh(jb)
+                print("Job entry committed to DB", flush=True)
+            except Exception as e:
+                db.rollback()  # Undo changes if commit fails
+                raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+            
+            print("Upload successful", flush=True)
+            return {"message": "Upload successful"}
+
+        # If the last chunk hasn't been received yet, just return a 200 response
+        return {"message": "Chunk received, waiting for other chunks"}
 
     except Exception as e:
-        # Handle failure by logging (token remains valid for retry)
-        print("Error",str(e))
+        print(f"Error: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
