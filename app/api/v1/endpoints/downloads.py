@@ -178,6 +178,7 @@ async def upload_file(token: str,
     # No session ID specified.
     if not token_session_id:
         token_info["session_id"] = str(session_id)
+        token_session_id = token_info["session_id"]
         redis_client.setex(token, timedelta(seconds=cfg.upload_link_ttl), json.dumps(token_info))
 
     # Handle session ID mismatch
