@@ -165,22 +165,9 @@ async def upload_file(token: str,
     print("Job found and user authorized", flush=True)
 
     # Step 3: Check if token_info contains a file path and a session ID.
-    file_path = token_info.get("file_path", None)
-    token_session_id = token_info.get("session_id", None)
-    # No path specified.
-    if not file_path:    
-        unique_filename = f"{uuid.uuid4()}.dat"
-        unique_id = str(uuid.uuid4())[:8]
-        file_path = os.path.join(cfg.save_path, unique_filename)
-        token_info["file_path"] = file_path
-        redis_client.setex(token, timedelta(seconds=cfg.upload_link_ttl), json.dumps(token_info))
-    print("File path: ", file_path, flush=True)
-    # No session ID specified.
-    if not token_session_id:
-        token_info["session_id"] = str(session_id)
-        token_session_id = token_info["session_id"]
-        redis_client.setex(token, timedelta(seconds=cfg.upload_link_ttl), json.dumps(token_info))
-
+    file_path = token_info.get("file_path", os.path.join(cfg.save_path, f"{uuid.uuid4()}.dat"))
+    token_session_id = token_info.get("session_id", session_id)
+    unique_id = token_info.get("unique_id", str(uuid.uuid4())[:8])
     # Handle session ID mismatch
     if token_session_id != session_id:
         # Invalidate token
@@ -188,7 +175,10 @@ async def upload_file(token: str,
         print("Session ID mismatch", flush=True)
         print(f"Invalidated token {token}", flush=True)
         raise HTTPException(status_code=403, detail="Session ID mismatch")
-
+    # Update redis
+    token_info["file_path"] = file_path
+    token_info["unique_id"] = unique_id
+    token_info["session_id"] = session_id
 
     # Step 4: Get a tmp file path
     os.makedirs(cfg.tmp_path, exist_ok=True)
@@ -211,7 +201,7 @@ async def upload_file(token: str,
             # Write the received chunk
             chunk_data = await file.read()  # Read the current chunk of data
             await tmp_file.write(chunk_data)  # Append the chunk to the file
-            print(f"Chunk {chunk_index}/{total_chunks} written to {file_path}", flush=True)
+            print(f"Chunk {chunk_index}/{total_chunks} written to {tmp_file_path}", flush=True)
 
     except Exception as e:
         print(f"Error while writing the file: {str(e)}", flush=True)
@@ -233,6 +223,7 @@ async def upload_file(token: str,
             os.makedirs(cfg.save_path, exist_ok=True)
             with open(file_path, "wb") as final_file:
                 for chunk in chunks:
+                    print(f"Combining chunk {chunk}...", flush=True)
                     with open(os.path.join(cfg.tmp_path, f"{session_id}_{chunk}.tmp"), "rb") as tmp_file:
                         final_file.write(tmp_file.read())
             print("Chunks combined into a single file", flush=True)
