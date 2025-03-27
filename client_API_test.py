@@ -23,7 +23,7 @@ refresh_token = login_info['refresh_token']
 if True:
     # Create channel
     print("Will create a channel now")
-    channel_data = {"input_dimension": 50, "output_dimension": 50, "num_kraus": 24, "method": "haar"}
+    channel_data = {"input_dimension": 1024, "output_dimension": 1024, "num_kraus": 24, "method": "haar"}
     headers = {"Authorization": f"Bearer {access_token}"}
     response = requests.post(f"{api_url}/channels/create", data=channel_data, headers=headers)
     print(response)  # Should print the channel creation info

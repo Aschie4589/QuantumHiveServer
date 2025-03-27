@@ -123,7 +123,7 @@ def request_upload(current_user: dict = Depends(get_current_user), response_mode
 
 
 @router.post("/uploa2/{token}")
-async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
+async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     async with aiofiles.open(os.path.join(cfg.save_path, "prova123.dat"), "wb") as out_file:
         chunk_count = 0  # Track number of chunks
         while True:
@@ -138,11 +138,13 @@ async def upload_file(token: str, file: UploadFile = FileField(...), job_id : st
     
 
 @router.post("/upload/{token}")
-async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
+async def upload_file(token: str, file: UploadFile = FileField(...), job_id : str = Form(...),file_type : str = Form(...),db: Session = Depends(get_db),current_user: dict = Depends(get_current_user)):
     """
     Securely upload a file using a one-time token. TODO: validate the file!!!
     """
 
+    print("Upload request received", flush=True)
+    print("Checking token...", flush=True)
     # Step 1: Retrieve and validate the token from Redis
     token_data = redis_client.get(token)
     if not token_data:
@@ -150,6 +152,7 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
 
     token_info = json.loads(token_data)
     user_id = token_info["user_id"]
+    print("Token validated", flush=True)
 
     # Step 2: Ensure the requesting user matches the token user
     if user_id != current_user["sub"]:
@@ -158,7 +161,7 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
     jb = db.query(Job).filter(Job.id == job_id).first()
     if not jb:
         raise HTTPException(status_code=404, detail="Job not found")
-
+    print("Job found and user authorized", flush=True)
 
     # Step 3: Save the file to the server. Extension is just .dat
     # Obtain filename
@@ -166,12 +169,15 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
     unique_id = str(uuid.uuid4())[:8]
     file_path = os.path.join(cfg.save_path, unique_filename)
 
+    print("File path: ", file_path, flush=True)
     try:
         # ensure path exists
         os.makedirs(cfg.save_path, exist_ok=True)
+        print("Path exists", flush=True)
         # Save the file, read chunks
+        print("Saving file...", flush=True)
         async with aiofiles.open(file_path, "wb") as out_file:
-            print("File received, saving to disk...", flush=True)
+            print("Opened output file", flush=True)
             chunk_count = 0  # Track number of chunks
             file_available = True
             while file_available:
@@ -180,8 +186,12 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
                     print(f"End of file reached after {chunk_count} chunks", flush=True)
                     file_available = False
                 chunk_count += 1
-                print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
+                if file_available:
+                    print(f"Chunk {chunk_count}: {len(chunk)} bytes received", flush=True)  # Debugging output
                 await out_file.write(chunk)
+                print(f"Chunk {chunk_count}: {len(chunk)} bytes written", flush=True)  # Debugging output
+
+
         print("File saved to disk: ", file_path, flush=True)
 
         # Step 4: Store file metadata in the database
@@ -189,12 +199,11 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
         db.add(new_file)
         db.commit()
         db.refresh(new_file)
-
+        print("DB entry created for file", flush=True)
         # Step 5: Invalidate token (only after successful upload)
         redis_client.delete(token)
-
+        print("Token invalidated", flush=True)
         # Step 6: update the job entry corresponding to the job_id with the file id
-        print("Committed to DB, updating job entry...", flush=True)        
         try:
             file_type_enum = FileTypeEnum(file_type)
         except ValueError:
@@ -207,9 +216,11 @@ async def upload2_file(token: str, file: UploadFile = FileField(...), job_id : s
         try:
             db.commit()
             db.refresh(jb)
+            print("Job entry committed to DB", flush=True)        
         except Exception as e:
             db.rollback()  # Undo changes if commit fails
             raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+        print("Upload successful", flush=True)
         return {"message": "Upload successful"}
 
     except Exception as e:
